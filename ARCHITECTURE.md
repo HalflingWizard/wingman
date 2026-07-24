@@ -13,9 +13,13 @@ Wingman is a small Python monolith. FastAPI serves the local web interface, aiog
 
 The web health route reads configuration and database status without exposing secrets.
 
+Phase 2 adds a memory service with ownership checks and allowed field validation. Memory changes are recorded as tool executions when they come through the model action interface. Telegram cards store their chat and message identifiers. Delete and confirm callbacks check ownership before changing a memory, and repeated callbacks are safe because the resulting state is durable.
+
 ## Context and data boundaries
 
 Phase 1 uses recent raw messages only. Memory, retrieval, summaries, tool validation, and agent inspection are added in later phases. The model never receives API keys or Telegram tokens.
+
+Phase 2 stores memories and agent run records. Retrieval and structured model actions will use these records in Phase 3.
 
 ## Process lifecycle
 

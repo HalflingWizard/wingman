@@ -21,7 +21,15 @@ def make_engine(settings: Settings) -> Engine:
 
 
 def initialize_database(settings: Settings) -> None:
-    from wingman.models import Conversation, Message, User  # noqa: F401
+    from wingman.models import (  # noqa: F401
+        AgentRun,
+        Conversation,
+        Memory,
+        Message,
+        TelegramCard,
+        ToolExecution,
+        User,
+    )
 
     Base.metadata.create_all(make_engine(settings))
 
