@@ -10,9 +10,12 @@ from sqlalchemy.orm import Session
 from wingman.models import (
     AgentRun,
     Conversation,
+    ConversationSummary,
     Memory,
     MemoryNote,
     Message,
+    PendingState,
+    SummaryUpdate,
     TelegramCard,
     ToolExecution,
     User,
@@ -201,6 +204,40 @@ def list_memory_notes(session: Session, user: User, memory_id: str) -> list[Memo
     )
 
 
+def update_memory_note(
+    session: Session,
+    user: User,
+    note_id: str,
+    text: str,
+    note_type: str = "evidence",
+) -> MemoryNote:
+    note = session.get(MemoryNote, note_id)
+    if note is None:
+        raise ValueError("Memory note does not exist")
+    memory = get_owned_memory(session, user, note.memory_id)
+    if memory is None:
+        raise ValueError("Memory does not exist")
+    if not text.strip() or len(text) > 2000:
+        raise ValueError("Memory note must contain 1 to 2000 characters")
+    if note_type not in {"evidence", "context", "correction", "source", "interpretation"}:
+        raise ValueError("Unsupported memory note type")
+    note.text = text.strip()
+    note.note_type = note_type
+    memory.embedding_text = f"{memory.statement}. {note.text}"
+    memory.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(note)
+    return note
+
+
+def delete_memory_note(session: Session, user: User, note_id: str) -> None:
+    note = session.get(MemoryNote, note_id)
+    if note is None or get_owned_memory(session, user, note.memory_id) is None:
+        raise ValueError("Memory note does not exist")
+    session.delete(note)
+    session.commit()
+
+
 def set_memory_embedding(
     session: Session, user: User, memory_id: str, vector: list[float]
 ) -> Memory:
@@ -220,8 +257,17 @@ def list_memories(session: Session, user: User, include_deleted: bool = False) -
     return list(session.scalars(query))
 
 
-def create_agent_run(session: Session, conversation: Conversation, model_name: str) -> AgentRun:
-    run = AgentRun(conversation_id=conversation.id, model_name=model_name)
+def create_agent_run(
+    session: Session,
+    conversation: Conversation,
+    model_name: str,
+    request_snapshot: str | None = None,
+) -> AgentRun:
+    run = AgentRun(
+        conversation_id=conversation.id,
+        model_name=model_name,
+        request_snapshot=request_snapshot,
+    )
     session.add(run)
     session.commit()
     session.refresh(run)
@@ -235,6 +281,8 @@ def finish_agent_run(
     latency_ms: int | None = None,
     error: str | None = None,
     response_snapshot: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
 ) -> None:
     run = session.get(AgentRun, run_id)
     if run is None:
@@ -243,8 +291,93 @@ def finish_agent_run(
     run.latency_ms = latency_ms
     run.error = error
     run.response_snapshot = response_snapshot
+    run.input_tokens = input_tokens
+    run.output_tokens = output_tokens
     run.completed_at = datetime.now(UTC)
     session.commit()
+
+
+def get_or_create_summary(session: Session, conversation: Conversation) -> ConversationSummary:
+    summary = session.scalar(
+        select(ConversationSummary).where(ConversationSummary.conversation_id == conversation.id)
+    )
+    if summary is None:
+        summary = ConversationSummary(conversation_id=conversation.id)
+        session.add(summary)
+        session.commit()
+        session.refresh(summary)
+    return summary
+
+
+def save_summary(
+    session: Session,
+    conversation: Conversation,
+    summary_text: str,
+    message_ids: list[str],
+    through_message_id: str | None,
+) -> ConversationSummary:
+    summary = get_or_create_summary(session, conversation)
+    previous_text = summary.summary_text
+    summary.summary_text = summary_text.strip()
+    summary.estimated_tokens = max(1, len(summary.summary_text) // 4)
+    summary.summarized_through_message_id = through_message_id
+    summary.updated_at = datetime.now(UTC)
+    session.add(
+        SummaryUpdate(
+            summary_id=summary.id,
+            previous_text=previous_text,
+            added_message_ids_json=json.dumps(message_ids),
+            new_text=summary.summary_text,
+        )
+    )
+    session.commit()
+    session.refresh(summary)
+    return summary
+
+
+def get_open_pending_state(
+    session: Session, user: User, conversation: Conversation
+) -> PendingState | None:
+    now = datetime.now(UTC)
+    state = session.scalar(
+        select(PendingState)
+        .where(
+            PendingState.user_id == user.id,
+            PendingState.conversation_id == conversation.id,
+            PendingState.status == "open",
+        )
+        .order_by(PendingState.created_at.desc())
+    )
+    if state is not None and state.expires_at.replace(tzinfo=UTC) <= now:
+        state.status = "expired"
+        session.commit()
+        return None
+    return state
+
+
+def create_pending_state(
+    session: Session,
+    user: User,
+    conversation: Conversation,
+    state_type: str,
+    missing_information: str,
+    question_asked: str,
+    expires_at: datetime,
+    related_entity_id: str | None = None,
+) -> PendingState:
+    state = PendingState(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        state_type=state_type,
+        missing_information=missing_information,
+        question_asked=question_asked,
+        expires_at=expires_at,
+        related_entity_id=related_entity_id,
+    )
+    session.add(state)
+    session.commit()
+    session.refresh(state)
+    return state
 
 
 def record_tool_execution(

@@ -24,10 +24,13 @@ def initialize_database(settings: Settings) -> None:
     from wingman.models import (  # noqa: F401
         AgentRun,
         Conversation,
+        ConversationSummary,
         Memory,
         MemoryNote,
         Message,
+        PendingState,
         RetrievalLog,
+        SummaryUpdate,
         TelegramCard,
         ToolExecution,
         User,

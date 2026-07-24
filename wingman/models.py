@@ -31,6 +31,7 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     user: Mapped[User] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    summary: Mapped["ConversationSummary | None"] = relationship(back_populates="conversation")
 
 
 class Message(Base):
@@ -43,6 +44,48 @@ class Message(Base):
     telegram_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class ConversationSummary(Base):
+    __tablename__ = "conversation_summaries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id"), unique=True, index=True
+    )
+    summary_text: Mapped[str] = mapped_column(Text, default="")
+    summarized_through_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id"), nullable=True
+    )
+    estimated_tokens: Mapped[int] = mapped_column(default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    conversation: Mapped[Conversation] = relationship(back_populates="summary")
+
+
+class SummaryUpdate(Base):
+    __tablename__ = "summary_updates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    summary_id: Mapped[str] = mapped_column(ForeignKey("conversation_summaries.id"), index=True)
+    previous_text: Mapped[str] = mapped_column(Text, default="")
+    added_message_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    new_text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class PendingState(Base):
+    __tablename__ = "pending_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    state_type: Mapped[str] = mapped_column(String(60))
+    related_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    missing_information: Mapped[str] = mapped_column(Text)
+    question_asked: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
 
 
 class Memory(Base):

@@ -6,7 +6,7 @@ Wingman is a private Telegram relationship assistant with a local administration
 
 Phase 1 is implemented. It provides configuration, SQLite persistence, a local health page, Telegram owner authorization, and basic OpenAI conversation replies.
 
-Phase 2 and Phase 3 are implemented. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/memories` to manage memories locally, or `/retrieval` to inspect recent retrievals. The web pages are not authenticated yet.
+Phase 2, Phase 3, and Phase 4 are implemented. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the dashboard. It links to memories, conversations, full API calls, health, and retrieval. The web pages are not authenticated yet.
 
 When a Telegram memory card is deleted, it first changes to a deleted message. The next owner message removes that old card from the chat.
 

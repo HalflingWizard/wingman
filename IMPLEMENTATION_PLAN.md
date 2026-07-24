@@ -53,7 +53,20 @@ Delivered in Phase 3
 
 ## Phase 4
 
+Status complete
+
 - Add rolling summaries, token budgets, pending conversational state, and conversation inspection.
+
+Delivered in Phase 4
+
+- Added rolling conversation summaries with summary update history and a message cursor.
+- Added configurable recent-message and context-token budgets.
+- Added short-lived pending conversational state with expiration.
+- Added editable and removable memory notes in the web memory page.
+- Added a central dashboard with links to health, memories, conversations, API calls, and retrieval.
+- Added a full API-call inspector showing stored prompts, context, recent messages, responses, token use, latency, and errors.
+- Added conversation inspection with summaries and recent messages.
+- Added Phase 4 tests for these interfaces and lifecycle behaviors.
 
 ## Phase 5
 

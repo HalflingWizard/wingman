@@ -1,5 +1,6 @@
 """Telegram polling and owner authorization."""
 
+import json
 from time import perf_counter
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -24,12 +25,15 @@ from wingman.services import (
     create_agent_run,
     create_memory,
     finish_agent_run,
+    get_open_pending_state,
     get_or_create_conversation,
+    get_or_create_summary,
     get_or_create_user,
     get_owned_memory,
     mark_card_cleaned,
     mark_card_deleted,
     pending_deleted_cards,
+    save_summary,
     save_telegram_card,
     set_memory_embedding,
 )
@@ -159,23 +163,109 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
             conversation = get_or_create_conversation(session, user)
             add_message(session, conversation, "user", message.text, message.message_id)
-            history = [(item.sender, item.text) for item in conversation.messages]
             results = retrieve_memories(session, user, message.text, query_vector=query_vector)
             log_retrieval(session, user, conversation, retrieval_query(message.text, user), results)
+            summary = get_or_create_summary(session, conversation)
+            pending_state = get_open_pending_state(session, user, conversation)
+            summary_start = 0
+            if summary.summarized_through_message_id:
+                for index, item in enumerate(conversation.messages):
+                    if item.id == summary.summarized_through_message_id:
+                        summary_start = index + 1
+                        break
+            old_messages = conversation.messages[summary_start : -settings.recent_message_limit]
+            summary_needed = len(conversation.messages) > settings.summary_threshold
+            existing_summary = summary.summary_text
+            summary_message_ids = [item.id for item in old_messages]
+            summary_through_id = old_messages[-1].id if old_messages else None
+        if model_client is not None and summary_needed and old_messages:
+            summary_started = perf_counter()
+            summary_request = json.dumps(
+                {
+                    "type": "rolling_summary",
+                    "existing_summary": existing_summary,
+                    "messages": [(item.sender, item.text) for item in old_messages],
+                },
+                sort_keys=True,
+            )
+            with sessions() as session:
+                user = get_or_create_user(session, message.from_user.id)
+                conversation = get_or_create_conversation(session, user)
+                summary_run = create_agent_run(
+                    session,
+                    conversation,
+                    model_client.summary_model,
+                    summary_request,
+                )
+            try:
+                new_summary = await model_client.summarize(
+                    existing_summary,
+                    [(item.sender, item.text) for item in old_messages],
+                )
+                with sessions() as session:
+                    user = get_or_create_user(session, message.from_user.id)
+                    conversation = get_or_create_conversation(session, user)
+                    summary = save_summary(
+                        session,
+                        conversation,
+                        new_summary,
+                        summary_message_ids,
+                        summary_through_id,
+                    )
+                    finish_agent_run(
+                        session,
+                        summary_run.id,
+                        "completed",
+                        round((perf_counter() - summary_started) * 1000),
+                        response_snapshot=new_summary,
+                        input_tokens=model_client.last_usage[0],
+                        output_tokens=model_client.last_usage[1],
+                    )
+            except Exception as exc:
+                with sessions() as session:
+                    finish_agent_run(
+                        session,
+                        summary_run.id,
+                        "failed",
+                        round((perf_counter() - summary_started) * 1000),
+                        str(exc),
+                        input_tokens=model_client.last_usage[0],
+                        output_tokens=model_client.last_usage[1],
+                    )
+        with sessions() as session:
+            user = get_or_create_user(session, message.from_user.id)
+            conversation = get_or_create_conversation(session, user)
+            summary = get_or_create_summary(session, conversation)
+            pending_state = get_open_pending_state(session, user, conversation)
             built_context = build_context(
                 user,
                 conversation,
                 message.text,
                 results,
                 settings.timezone,
+                summary=summary,
+                pending_state=pending_state,
+                max_messages=settings.recent_message_limit,
+                token_budget=settings.context_token_budget,
             )
+            history = built_context.messages
         if model_client is None:
             await message.answer("I am connected, but the OpenAI API key is not configured yet.")
             return
+        request_snapshot = json.dumps(
+            {
+                "system_prompt": built_context.static_context,
+                "user_prompt": message.text,
+                "context_added": built_context.dynamic_context,
+                "recent_messages": history,
+                "estimated_context_tokens": built_context.estimated_tokens,
+            },
+            sort_keys=True,
+        )
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id)
             conversation = get_or_create_conversation(session, user)
-            run = create_agent_run(session, conversation, model_client.model)
+            run = create_agent_run(session, conversation, model_client.model, request_snapshot)
         started = perf_counter()
         try:
             answer = await model_client.reply(
@@ -192,6 +282,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     "failed",
                     round((perf_counter() - started) * 1000),
                     str(exc),
+                    input_tokens=model_client.last_usage[0],
+                    output_tokens=model_client.last_usage[1],
                 )
             await message.answer("I ran into a problem while replying. Please try again.")
             return
@@ -201,7 +293,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 run.id,
                 "completed",
                 round((perf_counter() - started) * 1000),
-                response_snapshot=answer[:4000],
+                response_snapshot=answer,
+                input_tokens=model_client.last_usage[0],
+                output_tokens=model_client.last_usage[1],
             )
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id)
