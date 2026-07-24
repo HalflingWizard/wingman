@@ -14,9 +14,11 @@ from aiogram.types import (
 )
 
 from wingman.config import Settings
+from wingman.context_builder import build_context
 from wingman.database import session_factory
 from wingman.model_client import ModelClient
 from wingman.models import Memory, now_utc
+from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
 from wingman.services import (
     add_message,
     create_agent_run,
@@ -25,7 +27,11 @@ from wingman.services import (
     get_or_create_conversation,
     get_or_create_user,
     get_owned_memory,
+    mark_card_cleaned,
+    mark_card_deleted,
+    pending_deleted_cards,
     save_telegram_card,
+    set_memory_embedding,
 )
 
 
@@ -69,6 +75,14 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             memory = create_memory(session, user, statement)
             memory_id = memory.id
             card_text, keyboard = memory_card(memory)
+        if model_client is not None:
+            try:
+                vector = await model_client.embed(memory.statement, settings.openai_embedding_model)
+                with sessions() as session:
+                    user = get_or_create_user(session, message.from_user.id)
+                    set_memory_embedding(session, user, memory_id, vector)
+            except Exception:
+                pass
         card = await message.answer(card_text, reply_markup=keyboard)
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id)
@@ -96,6 +110,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 memory.status = "deleted"
                 memory.deleted_at = now_utc()
                 session.commit()
+                mark_card_deleted(session, memory.id)
                 text = f"🗑️ Deleted memory\n\n{memory.statement}"
                 try:
                     await callback.message.edit_text(text, reply_markup=None)
@@ -121,9 +136,39 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             return
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
+            old_cards = pending_deleted_cards(session, user, message.chat.id)
+        for old_card in old_cards:
+            bot = message.bot
+            if bot is None:
+                break
+            try:
+                await bot.delete_message(message.chat.id, old_card.telegram_message_id)
+            except Exception:
+                continue
+            with sessions() as session:
+                mark_card_cleaned(session, old_card.id)
+        query_vector = None
+        if model_client is not None:
+            try:
+                query_vector = await model_client.embed(
+                    message.text, settings.openai_embedding_model
+                )
+            except Exception:
+                pass
+        with sessions() as session:
+            user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
             conversation = get_or_create_conversation(session, user)
             add_message(session, conversation, "user", message.text, message.message_id)
             history = [(item.sender, item.text) for item in conversation.messages]
+            results = retrieve_memories(session, user, message.text, query_vector=query_vector)
+            log_retrieval(session, user, conversation, retrieval_query(message.text, user), results)
+            built_context = build_context(
+                user,
+                conversation,
+                message.text,
+                results,
+                settings.timezone,
+            )
         if model_client is None:
             await message.answer("I am connected, but the OpenAI API key is not configured yet.")
             return
@@ -134,7 +179,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         started = perf_counter()
         try:
             answer = await model_client.reply(
-                history, settings.user_name, settings.primary_person_name
+                history,
+                settings.user_name,
+                settings.primary_person_name,
+                built_context.static_context,
             )
         except Exception as exc:
             with sessions() as session:

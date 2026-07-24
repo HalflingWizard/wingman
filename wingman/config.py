@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     telegram_owner_id: int | None = Field(default=None, ge=1)
     openai_api_key: str = ""
     openai_main_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     user_name: str = ""
     primary_person_name: str = ""
     timezone: str = "UTC"

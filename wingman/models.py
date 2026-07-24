@@ -59,7 +59,26 @@ class Memory(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telegram_card_message_id: Mapped[int | None] = mapped_column(nullable=True)
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_retrieved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     user: Mapped[User] = relationship()
+
+
+class MemoryNote(Base):
+    __tablename__ = "memory_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    memory_id: Mapped[str] = mapped_column(ForeignKey("memories.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    note_type: Mapped[str] = mapped_column(String(20), default="evidence")
+    source_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id"), nullable=True, index=True
+    )
+    confidence: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class TelegramCard(Base):
@@ -106,4 +125,19 @@ class ToolExecution(Base):
     input_json: Mapped[str] = mapped_column(Text)
     output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class RetrievalLog(Base):
+    __tablename__ = "retrieval_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversations.id"), index=True, nullable=True
+    )
+    query_text: Mapped[str] = mapped_column(Text)
+    query_json: Mapped[str] = mapped_column(Text)
+    candidates_json: Mapped[str] = mapped_column(Text)
+    selected_json: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

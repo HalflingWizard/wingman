@@ -12,10 +12,12 @@ from wingman.config import Settings, get_settings
 from wingman.database import make_engine, session_factory
 from wingman.models import User
 from wingman.services import (
+    add_memory_note,
     confirm_memory,
     create_memory,
     delete_memory,
     list_memories,
+    list_memory_notes,
     update_memory,
 )
 
@@ -66,30 +68,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_factory(active_settings)() as session:
             user = web_user(session)
             records = list_memories(session, user, include_deleted=True)
-        rows = []
-        for memory in records:
-            action = "restore" if memory.status == "deleted" else "delete"
-            action_label = "Restore" if action == "restore" else "Delete"
-            rows.append(
-                "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
-                f"<p><strong>{memory.type}</strong> {memory.status}</p>"
-                f"<p>{escape(memory.statement)}</p>"
-                f"<form method='post' action='/memories/{memory.id}/update'>"
-                f"<input name='statement' value='{escape(memory.statement, quote=True)}' "
-                "maxlength='4000' required>"
-                "<button>Save</button></form>"
-                f"<form method='post' action='/memories/{memory.id}/{action}' "
-                "style='display:inline'>"
-                f"<button>{action_label}</button></form>"
-                + (
-                    f"<form method='post' action='/memories/{memory.id}/confirm' "
-                    "style='display:inline'>"
-                    "<button>Confirm</button></form>"
-                    if memory.status == "inferred"
-                    else ""
+            rows = []
+            for memory in records:
+                action = "restore" if memory.status == "deleted" else "delete"
+                action_label = "Restore" if action == "restore" else "Delete"
+                notes = "".join(
+                    f"<p><small>{escape(note.note_type)} {escape(note.text)}</small></p>"
+                    for note in list_memory_notes(session, user, memory.id)
                 )
-                + "</article>"
-            )
+                card = (
+                    "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
+                    f"<p><strong>{memory.type}</strong> {memory.status}</p>"
+                    f"<p>{escape(memory.statement)}</p>"
+                    f"{notes}<form method='post' action='/memories/{memory.id}/update'>"
+                    f"<input name='statement' value='{escape(memory.statement, quote=True)}' "
+                    "maxlength='4000' required><button>Save</button></form>"
+                    f"<form method='post' action='/memories/{memory.id}/notes'>"
+                    "<input name='note_text' placeholder='Evidence or context' "
+                    "maxlength='2000' required>"
+                    "<button>Add note</button></form>"
+                    f"<form method='post' action='/memories/{memory.id}/{action}' "
+                    "style='display:inline'>"
+                    f"<button>{action_label}</button></form>"
+                )
+                if memory.status == "inferred":
+                    card += (
+                        f"<form method='post' action='/memories/{memory.id}/confirm' "
+                        "style='display:inline'><button>Confirm</button></form>"
+                    )
+                card += "</article>"
+                rows.append(card)
         return (
             "<html><head><title>Wingman memories</title></head><body>"
             "<h1>Memories</h1>"
@@ -136,5 +144,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user = web_user(session)
             confirm_memory(session, user, memory_id)
         return memories()
+
+    @app.post("/memories/{memory_id}/notes", response_class=HTMLResponse)
+    def add_note(
+        memory_id: str,
+        note_text: str = Form(...),
+        note_type: str = Form("evidence"),
+    ) -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            add_memory_note(session, user, memory_id, note_text, note_type)
+        return memories()
+
+    @app.get("/retrieval", response_class=HTMLResponse)
+    def retrieval_inspector() -> str:
+        from wingman.models import RetrievalLog
+
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            logs = list(
+                session.scalars(
+                    select(RetrievalLog)
+                    .where(RetrievalLog.user_id == user.id)
+                    .order_by(RetrievalLog.created_at.desc())
+                    .limit(20)
+                )
+            )
+        rows = "".join(
+            f"<li>{escape(log.query_text)} <pre>{escape(log.selected_json)}</pre></li>"
+            for log in logs
+        )
+        return f"<html><body><h1>Retrieval inspector</h1><ul>{rows}</ul></body></html>"
 
     return app

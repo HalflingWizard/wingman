@@ -1,4 +1,4 @@
-"""Validated Phase 2 model action tools."""
+"""Validated model action tools."""
 
 from typing import Any
 
@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from wingman.models import User
 from wingman.services import (
+    add_memory_note,
     confirm_memory,
     create_memory,
     delete_memory,
+    get_owned_memory,
     record_tool_execution,
     update_memory,
 )
@@ -30,6 +32,13 @@ class UpdateMemoryInput(BaseModel):
     status: str | None = Field(default=None, max_length=20)
     confidence: float | None = Field(default=None, ge=0, le=1)
     importance: int | None = Field(default=None, ge=1, le=5)
+
+
+class AddMemoryNoteInput(BaseModel):
+    memory_id: str
+    text: str = Field(min_length=1, max_length=2000)
+    note_type: str = Field(default="evidence", max_length=20)
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class MemoryToolExecutor:
@@ -54,6 +63,13 @@ class MemoryToolExecutor:
                 memory = delete_memory(self.session, self.user, str(arguments["memory_id"]))
             elif name == "confirm_memory":
                 memory = confirm_memory(self.session, self.user, str(arguments["memory_id"]))
+            elif name == "add_memory_note":
+                note_data = AddMemoryNoteInput.model_validate(arguments)
+                add_memory_note(self.session, self.user, **note_data.model_dump())
+                note_memory = get_owned_memory(self.session, self.user, note_data.memory_id)
+                if note_memory is None:
+                    raise ValueError("Memory does not exist")
+                memory = note_memory
             else:
                 raise ValueError("Unknown tool")
             output = {"memory_id": memory.id, "status": memory.status}

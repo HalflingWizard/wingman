@@ -11,6 +11,7 @@ from wingman.models import (
     AgentRun,
     Conversation,
     Memory,
+    MemoryNote,
     Message,
     TelegramCard,
     ToolExecution,
@@ -103,6 +104,7 @@ def create_memory(
         status=status,
         confidence=confidence,
         importance=importance,
+        embedding_text=statement.strip(),
     )
     session.add(memory)
     session.commit()
@@ -145,11 +147,70 @@ def update_memory(session: Session, user: User, memory_id: str, **fields: Any) -
 
 
 def delete_memory(session: Session, user: User, memory_id: str) -> Memory:
-    return update_memory(session, user, memory_id, status="deleted")
+    memory = update_memory(session, user, memory_id, status="deleted")
+    memory.deleted_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(memory)
+    return memory
 
 
 def confirm_memory(session: Session, user: User, memory_id: str) -> Memory:
     return update_memory(session, user, memory_id, status="confirmed", confidence=1.0)
+
+
+def add_memory_note(
+    session: Session,
+    user: User,
+    memory_id: str,
+    text: str,
+    note_type: str = "evidence",
+    confidence: float | None = None,
+) -> MemoryNote:
+    memory = get_owned_memory(session, user, memory_id)
+    if memory is None or memory.status == "deleted":
+        raise ValueError("Memory does not exist")
+    if not text.strip() or len(text) > 2000:
+        raise ValueError("Memory note must contain 1 to 2000 characters")
+    if note_type not in {"evidence", "context", "correction", "source", "interpretation"}:
+        raise ValueError("Unsupported memory note type")
+    if confidence is not None and not 0 <= confidence <= 1:
+        raise ValueError("Confidence must be between 0 and 1")
+    note = MemoryNote(
+        memory_id=memory.id,
+        text=text.strip(),
+        note_type=note_type,
+        confidence=confidence,
+    )
+    session.add(note)
+    memory.embedding_text = f"{memory.statement}. {text.strip()}"
+    memory.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(note)
+    return note
+
+
+def list_memory_notes(session: Session, user: User, memory_id: str) -> list[MemoryNote]:
+    if get_owned_memory(session, user, memory_id) is None:
+        raise ValueError("Memory does not exist")
+    return list(
+        session.scalars(
+            select(MemoryNote)
+            .where(MemoryNote.memory_id == memory_id)
+            .order_by(MemoryNote.created_at)
+        )
+    )
+
+
+def set_memory_embedding(
+    session: Session, user: User, memory_id: str, vector: list[float]
+) -> Memory:
+    memory = get_owned_memory(session, user, memory_id)
+    if memory is None:
+        raise ValueError("Memory does not exist")
+    memory.embedding_json = json.dumps(vector)
+    session.commit()
+    session.refresh(memory)
+    return memory
 
 
 def list_memories(session: Session, user: User, include_deleted: bool = False) -> list[Memory]:
@@ -232,3 +293,33 @@ def save_telegram_card(
     memory.telegram_card_message_id = message_id
     session.commit()
     return card
+
+
+def mark_card_deleted(session: Session, memory_id: str) -> None:
+    card = session.scalar(select(TelegramCard).where(TelegramCard.memory_id == memory_id))
+    if card is not None:
+        card.status = "deleted"
+        card.updated_at = datetime.now(UTC)
+        session.commit()
+
+
+def pending_deleted_cards(session: Session, user: User, chat_id: int) -> list[TelegramCard]:
+    return list(
+        session.scalars(
+            select(TelegramCard)
+            .join(Memory, Memory.id == TelegramCard.memory_id)
+            .where(
+                Memory.user_id == user.id,
+                TelegramCard.telegram_chat_id == chat_id,
+                TelegramCard.status == "deleted",
+            )
+        )
+    )
+
+
+def mark_card_cleaned(session: Session, card_id: str) -> None:
+    card = session.get(TelegramCard, card_id)
+    if card is not None:
+        card.status = "cleaned"
+        card.updated_at = datetime.now(UTC)
+        session.commit()

@@ -37,7 +37,19 @@ Delivered in Phase 2
 
 ## Phase 3
 
+Status complete
+
 - Add embeddings, hybrid retrieval, memory notes, confirmation, card updates, and retrieval inspection.
+
+Delivered in Phase 3
+
+- Added configurable OpenAI embeddings using `text-embedding-3-small` by default.
+- Added stored embedding text and JSON vectors with a SQLite compatibility migration.
+- Added deterministic hybrid retrieval with lexical matching, semantic similarity, importance, confidence, and recency.
+- Added compact static and dynamic context construction for model turns.
+- Added memory notes and evidence updates.
+- Added retrieval audit records and a local retrieval inspector page.
+- Added delayed Telegram deletion. A deleted card first remains as an edited tombstone, then is removed before the next owner message.
 
 ## Phase 4
 
@@ -60,3 +72,4 @@ Delivered in Phase 2
 - The bot does not start without both a token and an allowed Telegram user ID.
 - OpenAI failures produce a short Telegram error and never create an invented assistant response.
 - Phase 2 web routes are local and unauthenticated. Web authentication and CSRF protection remain Phase 6 work.
+- Embedding failures fall back to lexical retrieval. No live OpenAI calls are made by the test suite.

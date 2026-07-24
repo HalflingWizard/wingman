@@ -2,13 +2,19 @@ from fastapi.testclient import TestClient
 
 from wingman.config import Settings
 from wingman.database import initialize_database, session_factory
-from wingman.models import AgentRun, Memory, ToolExecution, User
+from wingman.models import AgentRun, Memory, TelegramCard, ToolExecution, User
+from wingman.retrieval import retrieve_memories
 from wingman.services import (
+    add_memory_note,
     create_agent_run,
     create_memory,
     delete_memory,
     get_or_create_conversation,
     get_owned_memory,
+    mark_card_cleaned,
+    mark_card_deleted,
+    pending_deleted_cards,
+    save_telegram_card,
 )
 from wingman.tools import MemoryToolExecutor
 from wingman.web import create_app
@@ -80,3 +86,24 @@ def test_memory_web_create_edit_delete_and_agent_run(tmp_path):
     assert "She likes calm places" in response.text
     response = client.post(f"/memories/{memory.id}/delete")
     assert "deleted" in response.text
+
+
+def test_memory_notes_retrieval_and_delayed_card_cleanup(tmp_path):
+    settings = phase2_settings(tmp_path)
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        owner = User(telegram_user_id=42, name="Owner")
+        session.add(owner)
+        session.commit()
+        memory = create_memory(session, owner, "Casa Verde is quiet and romantic", "food_clue")
+        note = add_memory_note(session, owner, memory.id, "She said she prefers quiet places")
+        assert note.text.startswith("She said")
+        assert session.get(Memory, memory.id).embedding_text.endswith(note.text)
+        results = retrieve_memories(session, owner, "quiet restaurant")
+        assert results[0].memory.id == memory.id
+        card = save_telegram_card(session, memory, 42, 9001)
+        mark_card_deleted(session, memory.id)
+        pending = pending_deleted_cards(session, owner, 42)
+        assert pending[0].id == card.id
+        mark_card_cleaned(session, card.id)
+        assert session.get(TelegramCard, card.id).status == "cleaned"

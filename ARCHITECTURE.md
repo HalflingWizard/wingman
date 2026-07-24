@@ -21,6 +21,8 @@ Phase 1 uses recent raw messages only. Memory, retrieval, summaries, tool valida
 
 Phase 2 stores memories and agent run records. Retrieval and structured model actions will use these records in Phase 3.
 
+Phase 3 adds one concise embedding per memory. SQLite stores vectors as JSON for local simplicity. Retrieval combines lexical overlap and semantic similarity when an embedding is available, then applies deterministic importance, confidence, and recency weights. Retrieval candidates and score components are stored for inspection.
+
 ## Process lifecycle
 
 The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. A later phase will add dashboard lifecycle controls.
@@ -32,3 +34,5 @@ The initial database has users, conversations, and messages. IDs are UUID string
 ## Security boundary
 
 The web server is local-only by default. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables in Phase 1 and are redacted from health output. Password sessions, encrypted secret storage, CSRF protection, rate limiting, and first-run setup are Phase 6 work.
+
+Deleted Telegram cards use a two-step lifecycle. The callback immediately soft-deletes the memory and edits the card to show the deleted state. Before the next authorized text message is processed, the bot deletes those tombstones and marks their card records as cleaned. Telegram deletion failures leave the tombstone pending for a later retry.

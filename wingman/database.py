@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -25,13 +25,27 @@ def initialize_database(settings: Settings) -> None:
         AgentRun,
         Conversation,
         Memory,
+        MemoryNote,
         Message,
+        RetrievalLog,
         TelegramCard,
         ToolExecution,
         User,
     )
 
-    Base.metadata.create_all(make_engine(settings))
+    engine = make_engine(settings)
+    Base.metadata.create_all(engine)
+    if settings.database_url.startswith("sqlite"):
+        with engine.begin() as connection:
+            columns = {row[1] for row in connection.execute(text("PRAGMA table_info(memories)"))}
+            additions = {
+                "embedding_text": "TEXT",
+                "embedding_json": "TEXT",
+                "last_retrieved_at": "DATETIME",
+            }
+            for name, definition in additions.items():
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE memories ADD COLUMN {name} {definition}"))
 
 
 def session_factory(settings: Settings) -> sessionmaker[Session]:
