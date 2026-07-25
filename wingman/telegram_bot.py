@@ -2,6 +2,7 @@
 
 import json
 from time import perf_counter
+from typing import Any
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
@@ -18,7 +19,7 @@ from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
 from wingman.lifecycle import is_paused
-from wingman.model_client import ModelClient
+from wingman.model_client import MEMORY_TOOLS, ModelClient
 from wingman.models import Memory, now_utc
 from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
 from wingman.services import (
@@ -39,6 +40,7 @@ from wingman.services import (
     save_telegram_card,
     set_memory_embedding,
 )
+from wingman.tools import MemoryToolExecutor
 
 
 def memory_card(memory: Memory) -> tuple[str, InlineKeyboardMarkup]:
@@ -140,6 +142,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             return
         if not message.text:
             return
+        owner_id = message.from_user.id
         if is_paused(settings):
             await message.answer("I am paused for now. I will be back soon.")
             return
@@ -195,7 +198,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 sort_keys=True,
             )
             with sessions() as session:
-                user = get_or_create_user(session, message.from_user.id)
+                user = get_or_create_user(session, owner_id)
                 conversation = get_or_create_conversation(session, user)
                 summary_run = create_agent_run(
                     session,
@@ -270,6 +273,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 "context_added": built_context.dynamic_context,
                 "recent_messages": history,
                 "estimated_context_tokens": built_context.estimated_tokens,
+                "tools_available": [tool["name"] for tool in MEMORY_TOOLS],
             },
             sort_keys=True,
         )
@@ -278,6 +282,13 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             conversation = get_or_create_conversation(session, user)
             run = create_agent_run(session, conversation, model_client.model, request_snapshot)
         started = perf_counter()
+
+        def execute_model_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id)
+                executor = MemoryToolExecutor(session, user, agent_run_id=run.id)
+                return executor.execute(name, arguments)
+
         try:
             answer = await model_client.reply(
                 history,
@@ -285,6 +296,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 settings.primary_person_name,
                 built_context.static_context,
                 built_context.dynamic_context,
+                tool_executor=execute_model_tool,
             )
         except Exception as exc:
             with sessions() as session:
@@ -305,7 +317,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 run.id,
                 "completed",
                 round((perf_counter() - started) * 1000),
-                response_snapshot=answer,
+                response_snapshot=json.dumps(
+                    {"answer": answer, "tool_calls": model_client.last_tool_trace},
+                    ensure_ascii=False,
+                ),
                 input_tokens=model_client.last_usage[0],
                 output_tokens=model_client.last_usage[1],
             )

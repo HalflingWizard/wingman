@@ -119,3 +119,153 @@ Remaining limitations
 - OpenAI failures produce a short Telegram error and never create an invented assistant response.
 - The web dashboard is intentionally local-only and unauthenticated. Do not expose it beyond the trusted machine.
 - Embedding failures fall back to lexical retrieval. No live OpenAI calls are made by the test suite.
+
+## Post-1.0 roadmap
+
+The next update starts after the `1.0.0` baseline. These phases are planned work. They should be implemented in order and kept small enough that the application remains runnable after every phase.
+
+### Conversation requirement for every phase
+
+Wingman must still feel like a natural conversation between Matt and a thoughtful assistant. Internal actions such as retrieval, scoring, tool calls, embeddings, memory IDs, and database changes must stay invisible unless the owner is inspecting them in the dashboard.
+
+The assistant should
+
+- Use the owner's name naturally when it is useful.
+- Use the current date, time, and conversation history to understand references such as today, last night, the date, or Sara's birthday.
+- Ask at most one useful follow-up question at a time.
+- Avoid turning every message into a memory workflow.
+- Ask before saving an uncertain or broad preference.
+- Connect a new observation to an existing memory before creating a duplicate.
+- Explain suggestions in ordinary language rather than mentioning scores or retrieval.
+- Preserve the distinction between what Matt observed, what Chloe said, and what the assistant infers.
+
+### Phase 7
+
+Status complete
+
+Validated model tools and memory search
+
+- Define Responses API tools for searching memories, reading memory notes, creating memories, adding notes, confirming memories, and updating existing memories.
+- Add a read-only `search_memories` tool first. The tool must return owned records, relevant notes, source context, and a short reason for each match.
+- Connect tool calls to `MemoryToolExecutor` through one application-controlled dispatcher.
+- Keep ownership checks, input validation, transactions, audit records, and error handling in the application.
+- Never let the model write directly to SQLAlchemy or receive unrestricted database access.
+- Add tool-call request and result snapshots to the API-call inspector.
+- Add tests for valid calls, invalid arguments, unknown memory IDs, ownership isolation, duplicate prevention, and failed transactions.
+
+Delivered in Phase 7
+
+- Added Responses API function definitions for memory search, memory creation, note creation, memory updates, and memory confirmation.
+- Added an application-controlled Responses API tool loop with a bounded number of rounds.
+- Connected model tool calls to the validated `MemoryToolExecutor` and existing audit records.
+- Added read-only memory search results with memory text, status, confidence, importance, and notes.
+- Kept memory deletion out of model tools. Deletion remains an explicit owner action through cards and the dashboard.
+- Added tool names to request snapshots and tool arguments and results to response snapshots.
+- Added mocked tests for memory search and the Responses API tool loop.
+
+Acceptance examples
+
+- A question about jewelry can trigger a memory search when the initial retrieved context is weak.
+- The model can find the existing Sara's birthday earring memory instead of creating a second copy.
+- A failed tool call produces a natural response and does not invent a successful change.
+
+### Phase 8
+
+Status planned
+
+Natural memory conversation and evidence collection
+
+- Add a conversation policy for when to suggest a memory, when to ask permission, and when to remain conversational.
+- Let the model propose a memory without saving it immediately when the preference is uncertain.
+- Show a visible memory card only after the owner confirms or when an explicit `/remember` command is used.
+- Let the model add an evidence note to an existing memory when a new detail supports it.
+- Preserve evidence context such as the event, date, people present, source message, and what was directly observed.
+- Detect likely duplicates before creating a new memory.
+- Support a natural follow-up sequence with one question at a time.
+
+Target conversation behavior
+
+1. Matt says a date went well.
+2. Wingman asks whether he wants to save the preference when the statement is broad or uncertain.
+3. Matt confirms that Chloe likes fancy Italian restaurants.
+4. Wingman asks a focused follow-up about the dress or jewelry.
+5. Matt describes the black dress and silver accessories.
+6. Wingman creates an observation memory for Matt's observation only.
+7. Wingman asks for one useful detail about the earrings.
+8. Matt describes the silver sphere earring.
+9. Wingman checks the existing Sara's birthday memory.
+10. Wingman adds a dated evidence note instead of creating a duplicate.
+
+Acceptance requirements
+
+- The bot remains natural when no memory action is needed.
+- The bot never silently converts one observation into a confirmed preference.
+- Every saved memory card has a clear delete action.
+- Every note explains where and when the evidence came from when that information is available.
+
+### Phase 9
+
+Status planned
+
+Memory relationships, provenance, and context quality
+
+- Add structured source context for memories and notes, including source message, conversation, event, date, and optional subject.
+- Add evidence and contradiction handling so later observations can correct or qualify earlier ones.
+- Improve retrieval with query intent, aliases, stemming, notes, source context, and separate ranking explanations.
+- Retrieve memory notes with their parent memory when the note is the useful evidence.
+- Distinguish stable profile context, conversation context, event context, and temporary context in the model payload.
+- Add context quality checks that identify when useful retrieved context was ignored in the answer.
+- Add scenario tests for jewelry, restaurants, dates, corrections, and duplicate memories.
+
+Acceptance requirements
+
+- The API inspector clearly shows static context, dynamic context, retrieved records, tool calls, and final messages as separate sections.
+- A memory can be traced from the assistant response to the retrieved record and then to its notes and source message.
+- Context is short enough to fit the configured budget and strong enough to support the answer.
+
+### Phase 10
+
+Status planned
+
+Dashboard redesign and useful visual feedback
+
+- Create a shared minimal visual system for all pages.
+- Add Font Awesome icons with accessible labels and tooltips.
+- Add a consistent sidebar or top navigation with active-page state.
+- Add summary cards for bot status, database status, recent API calls, memory count, upcoming events, and pending reminders.
+- Improve memories with readable cards, status badges, note timelines, source context, search, filters, and clear actions.
+- Improve planning with separate views for places, ideas, events, and reminders.
+- Improve retrieval inspection with readable score tables, expandable candidate details, and copy buttons.
+- Keep long prompts and JSON in fixed-height scrollable panels.
+- Add empty states, success messages, error messages, and mobile-friendly spacing.
+- Keep the interface server-rendered unless a richer interaction is clearly needed.
+
+Acceptance requirements
+
+- A new user can understand the dashboard without reading the source code.
+- Every icon has a text label or accessible description.
+- The most important information is visible without opening raw JSON.
+- Detailed diagnostic information remains available when needed.
+
+### Phase 11
+
+Status planned
+
+Reliability, evaluation, and release hardening
+
+- Add conversation scenario fixtures for the target natural dialogues.
+- Add mocked Responses API tool-call tests without live API credentials.
+- Add regression tests for context usage and duplicate memory prevention.
+- Add model cost estimates and tool-call counts to the API-call inspector.
+- Add retries and timeouts for tool calls with clear user-facing errors.
+- Add retention controls for old API snapshots and retrieval logs.
+- Add a release checklist covering migrations, exports, backups, startup, port fallback, and Telegram behavior.
+- Release the next update only after the natural conversation scenarios pass review.
+
+## Next update priority order
+
+1. Tool foundation and safe memory search.
+2. Natural memory conversation and evidence notes.
+3. Provenance and context quality.
+4. Dashboard redesign with Font Awesome icons.
+5. Evaluation, reliability, and release hardening.

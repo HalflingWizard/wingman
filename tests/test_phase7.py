@@ -1,0 +1,83 @@
+import asyncio
+import json
+from types import SimpleNamespace
+
+from wingman.config import Settings
+from wingman.database import initialize_database, session_factory
+from wingman.model_client import ModelClient
+from wingman.models import Memory, User
+from wingman.tools import MemoryToolExecutor
+
+
+def phase7_settings(tmp_path):
+    return Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
+
+
+def test_search_memory_tool_returns_owned_text_and_notes(tmp_path):
+    settings = phase7_settings(tmp_path)
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        user = User(telegram_user_id=42, name="Matt")
+        session.add(user)
+        session.commit()
+        memory = Memory(user_id=user.id, statement="Chloe likes silver accessories")
+        session.add(memory)
+        session.commit()
+        result = MemoryToolExecutor(session, user).execute(
+            "search_memories", {"query": "what jewelry does she like"}
+        )
+    assert result["memories"][0]["memory_id"] == memory.id
+    assert result["memories"][0]["statement"] == "Chloe likes silver accessories"
+
+
+def test_model_client_runs_application_controlled_tool_loop():
+    settings = Settings(openai_api_key="test-key")
+    client = ModelClient(settings)
+    calls = []
+
+    class FakeResponses:
+        response_count = 0
+
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            self.response_count += 1
+            if self.response_count == 1:
+                return SimpleNamespace(
+                    output=[
+                        SimpleNamespace(
+                            type="function_call",
+                            name="search_memories",
+                            arguments=json.dumps({"query": "jewelry"}),
+                            call_id="call-1",
+                        )
+                    ],
+                    output_text="",
+                    usage=SimpleNamespace(input_tokens=10, output_tokens=2),
+                )
+            return SimpleNamespace(
+                output=[],
+                output_text="She likes silver accessories.",
+                usage=SimpleNamespace(input_tokens=20, output_tokens=5),
+            )
+
+    client.client = SimpleNamespace(responses=FakeResponses())
+    executed = []
+
+    def execute(name, arguments):
+        executed.append((name, arguments))
+        return {"memories": [{"statement": "She likes silver accessories"}]}
+
+    answer = asyncio.run(
+        client.reply(
+            [("user", "What jewelry does she like?")],
+            "Matt",
+            "Chloe",
+            "Static context",
+            "Dynamic context",
+            tool_executor=execute,
+        )
+    )
+    assert answer == "She likes silver accessories."
+    assert executed == [("search_memories", {"query": "jewelry"})]
+    assert "tools" in calls[0]
+    assert calls[1]["input"][-1]["type"] == "function_call_output"

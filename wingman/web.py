@@ -454,6 +454,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             except json.JSONDecodeError:
                 formatted_request = run.request_snapshot or ""
+            try:
+                formatted_response = json.dumps(
+                    json.loads(run.response_snapshot or "{}"),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            except json.JSONDecodeError:
+                formatted_response = run.response_snapshot or ""
             cards.append(
                 "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
                 f"<h2>{escape(run.model_name)} {escape(run.status)}</h2>"
@@ -464,7 +472,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"padding:1rem;white-space:pre-wrap'>{escape(formatted_request)}</pre>"
                 "<h3>Full response</h3>"
                 f"<pre style='max-height:420px;overflow:auto;background:#f6f8fa;"
-                f"padding:1rem;white-space:pre-wrap'>{escape(run.response_snapshot or '')}</pre>"
+                f"padding:1rem;white-space:pre-wrap'>{escape(formatted_response)}</pre>"
                 f"<p>Error {escape(run.error or '')}</p></article>"
             )
         return (

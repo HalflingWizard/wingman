@@ -10,11 +10,19 @@ The current application version is `1.0.0`. This is the first stable baseline fo
 
 The Phase 1 through Phase 6 implementation is included in version `1.0.0`. It provides configuration, SQLite persistence, the local dashboard, Telegram owner authorization, OpenAI conversation replies, memories, retrieval, planning, API-call inspection, exports, backups, and bot lifecycle controls.
 
+Phase 7 is now implemented on top of the `1.0.0` baseline. The model can request validated memory searches and controlled memory changes. Tool calls are audited and shown in the API-call inspector. Memory deletion remains an explicit owner action.
+
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 
 Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.
 
 When a Telegram memory card is deleted, it first changes to a deleted message. The next owner message removes that old card from the chat.
+
+## Next update roadmap
+
+The next update begins with validated model tools for memory search and memory actions. Later phases will improve natural evidence-gathering conversations, memory provenance, context quality, and the dashboard visual design. The dashboard redesign will use a minimal visual style and Font Awesome icons with accessible labels.
+
+Natural conversation is a release requirement. Wingman should ask focused questions, use the owner's name and time context naturally, compare new observations with existing memories, and avoid exposing retrieval or tool mechanics in Telegram.
 
 ## Requirements
 

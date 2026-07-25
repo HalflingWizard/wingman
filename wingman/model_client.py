@@ -1,10 +1,111 @@
 """OpenAI Responses API adapter."""
 
+import json
+from collections.abc import Callable
 from typing import Any, cast
 
 from openai import AsyncOpenAI
 
 from wingman.config import Settings
+
+ToolExecutor = Callable[[str, dict[str, Any]], dict[str, Any]]
+
+MEMORY_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": "search_memories",
+        "description": "Search the owner's saved memories and notes.",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "create_memory",
+        "description": "Create a saved memory after the user clearly states a durable detail.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "memory_type": {"type": "string"},
+                "status": {
+                    "type": "string",
+                    "enum": ["confirmed", "observed", "inferred", "uncertain"],
+                },
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+            },
+            "required": [
+                "statement",
+                "memory_type",
+                "status",
+                "confidence",
+                "importance",
+            ],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "add_memory_note",
+        "description": "Add evidence or source context to an existing memory.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "string"},
+                "text": {"type": "string", "minLength": 1, "maxLength": 2000},
+                "note_type": {"type": "string"},
+                "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            },
+            "required": ["memory_id", "text", "note_type", "confidence"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "update_memory",
+        "description": "Update an existing owned memory when the user corrects or clarifies it.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "string"},
+                "statement": {"type": ["string", "null"]},
+                "memory_type": {"type": ["string", "null"]},
+                "status": {"type": ["string", "null"]},
+                "confidence": {"type": ["number", "null"]},
+                "importance": {"type": ["integer", "null"]},
+            },
+            "required": [
+                "memory_id",
+                "statement",
+                "memory_type",
+                "status",
+                "confidence",
+                "importance",
+            ],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "confirm_memory",
+        "description": "Confirm an inferred memory after the user clearly confirms it.",
+        "parameters": {
+            "type": "object",
+            "properties": {"memory_id": {"type": "string"}},
+            "required": ["memory_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+]
 
 
 class ModelClient:
@@ -23,7 +124,9 @@ class ModelClient:
         person_name: str,
         static_context: str = "",
         dynamic_context: str = "",
+        tool_executor: ToolExecutor | None = None,
     ) -> str:
+        self.last_tool_trace: list[dict[str, Any]] = []
         prompt = (
             f"{static_context} "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
@@ -42,17 +145,54 @@ class ModelClient:
                 }
             )
         input_messages.extend({"role": role, "content": text} for role, text in messages[-20:])
-        response = await self.client.responses.create(
-            model=self.model,
-            instructions=prompt,
-            input=cast(Any, input_messages),
-        )
+        request: dict[str, Any] = {
+            "model": self.model,
+            "instructions": prompt,
+            "input": cast(Any, input_messages),
+        }
+        if tool_executor is not None:
+            request["tools"] = MEMORY_TOOLS
+        response = await self.client.responses.create(**request)
+        if tool_executor is not None:
+            for _ in range(4):
+                calls = [
+                    item
+                    for item in getattr(response, "output", [])
+                    if getattr(item, "type", None) == "function_call"
+                ]
+                if not calls:
+                    break
+                follow_up: list[Any] = list(response.output)
+                for call in calls:
+                    arguments: dict[str, Any] = {}
+                    try:
+                        parsed = json.loads(call.arguments)
+                        if not isinstance(parsed, dict):
+                            raise ValueError("Tool arguments must be a JSON object")
+                        arguments = parsed
+                        result = tool_executor(call.name, arguments)
+                        output = {"ok": True, "result": result}
+                    except Exception as exc:
+                        output = {"ok": False, "error": str(exc)}
+                    self.last_tool_trace.append(
+                        {"name": call.name, "arguments": arguments, "output": output}
+                    )
+                    follow_up.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": call.call_id,
+                            "output": json.dumps(output, sort_keys=True),
+                        }
+                    )
+                response = await self.client.responses.create(
+                    **request | {"input": cast(Any, follow_up)}
+                )
         usage = response.usage
         self.last_usage = (
             getattr(usage, "input_tokens", None) if usage else None,
             getattr(usage, "output_tokens", None) if usage else None,
         )
-        return response.output_text.strip()
+        return str(response.output_text).strip()
 
     async def summarize(self, existing_summary: str, messages: list[tuple[str, str]]) -> str:
         input_text = "\n".join(f"{sender}: {text}" for sender, text in messages)

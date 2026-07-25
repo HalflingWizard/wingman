@@ -6,12 +6,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from wingman.models import User
+from wingman.retrieval import retrieve_memories
 from wingman.services import (
     add_memory_note,
     confirm_memory,
     create_memory,
     delete_memory,
     get_owned_memory,
+    list_memory_notes,
     record_tool_execution,
     update_memory,
 )
@@ -41,6 +43,10 @@ class AddMemoryNoteInput(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
 
 
+class SearchMemoriesInput(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+
+
 class MemoryToolExecutor:
     def __init__(self, session: Session, user: User, agent_run_id: str | None = None) -> None:
         self.session = session
@@ -49,6 +55,41 @@ class MemoryToolExecutor:
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
+            if name == "search_memories":
+                search_data = SearchMemoriesInput.model_validate(arguments)
+                matches = retrieve_memories(self.session, self.user, search_data.query, limit=5)
+                output: dict[str, Any] = {
+                    "memories": [
+                        {
+                            "memory_id": result.memory.id,
+                            "statement": result.memory.statement,
+                            "status": result.memory.status,
+                            "confidence": result.memory.confidence,
+                            "importance": result.memory.importance,
+                            "notes": [
+                                {
+                                    "note_id": note.id,
+                                    "text": note.text,
+                                    "note_type": note.note_type,
+                                    "source_message_id": note.source_message_id,
+                                }
+                                for note in list_memory_notes(
+                                    self.session, self.user, result.memory.id
+                                )
+                            ],
+                        }
+                        for result in matches
+                    ]
+                }
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
             if name == "create_memory":
                 create_data = CreateMemoryInput.model_validate(arguments)
                 memory = create_memory(self.session, self.user, **create_data.model_dump())
