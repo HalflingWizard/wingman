@@ -2,6 +2,8 @@
 
 Wingman stores private relationship information. Run it on a trusted Linux machine and keep the data directory private.
 
+These security notes describe version `1.0.0`.
+
 The web server binds to `127.0.0.1` by default and accepts Telegram messages only from the configured numeric owner ID. Telegram usernames are not used for authorization.
 
 The web dashboard is intentionally local-only and does not require a password. Do not bind it to a public interface or expose it through a reverse proxy without adding authentication.

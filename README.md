@@ -1,10 +1,14 @@
 # Wingman
 
-Wingman is a private Telegram relationship assistant with a local administration interface. It stores conversation history and will later organize memories, places, events, and reminders.
+Wingman is a private Telegram relationship assistant with a local administration interface. It stores conversation history and organizes memories, places, events, and reminders.
+
+## Version
+
+The current application version is `1.0.0`. This is the first stable baseline for the implemented local dashboard, Telegram bot, memory system, retrieval inspector, planning features, exports, backups, and lifecycle controls.
 
 ## Current status
 
-Phase 1 is implemented. It provides configuration, SQLite persistence, a local health page, Telegram owner authorization, and basic OpenAI conversation replies.
+The Phase 1 through Phase 6 implementation is included in version `1.0.0`. It provides configuration, SQLite persistence, the local dashboard, Telegram owner authorization, OpenAI conversation replies, memories, retrieval, planning, API-call inspection, exports, backups, and bot lifecycle controls.
 
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 

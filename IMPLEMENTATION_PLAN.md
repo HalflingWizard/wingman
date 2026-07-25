@@ -2,6 +2,8 @@
 
 This plan follows the phases in `BUILD_SPEC.md`. The first release stays a small monolith with server-rendered pages and one local process.
 
+Version `1.0.0` is the current baseline. Phases 1 through 6 are implemented at core scope. The remaining limitations are listed in the Phase 6 section.
+
 ## Phase 1
 
 Status complete

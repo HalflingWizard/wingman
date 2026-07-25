@@ -12,6 +12,35 @@ from wingman.models import Conversation, Memory, User
 from wingman.services import list_memories
 
 WORD_RE = re.compile(r"[a-z0-9']+")
+STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "do",
+    "does",
+    "for",
+    "how",
+    "i",
+    "is",
+    "kind",
+    "of",
+    "she",
+    "should",
+    "the",
+    "they",
+    "to",
+    "type",
+    "what",
+    "which",
+    "would",
+}
+TERM_ALIASES = {
+    "accessories": "accessory",
+    "accessory": "accessory",
+    "jewellery": "accessory",
+    "jewelry": "accessory",
+}
 
 
 @dataclass(frozen=True)
@@ -25,8 +54,26 @@ class RetrievalResult:
     recency: float
 
 
+def _stem(word: str) -> str:
+    if len(word) > 5 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 5 and word.endswith("ing"):
+        return word[:-3]
+    if len(word) > 4 and word.endswith("ed"):
+        return word[:-2]
+    if len(word) > 4 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _words(text: str) -> set[str]:
-    return set(WORD_RE.findall(text.lower()))
+    words = set()
+    for raw_word in WORD_RE.findall(text.lower()):
+        if raw_word in STOP_WORDS:
+            continue
+        word = _stem(raw_word)
+        words.add(TERM_ALIASES.get(word, word))
+    return words
 
 
 def _cosine(left: list[float], right: list[float]) -> float:

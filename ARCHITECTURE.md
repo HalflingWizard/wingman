@@ -2,6 +2,8 @@
 
 Wingman is a small Python monolith. FastAPI serves the local web interface, aiogram owns the Telegram polling loop, SQLAlchemy persists data, and the OpenAI Responses API supplies conversation replies.
 
+The current application version is `1.0.0`. It represents the first stable baseline after Phases 1 through 6.
+
 ## Phase 1 request lifecycle
 
 1. Telegram receives a text message.

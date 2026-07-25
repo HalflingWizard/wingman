@@ -64,6 +64,22 @@ def test_retrieval_inspector_shows_text_and_score_components(tmp_path):
     assert "embedding_available" in page.text
 
 
+def test_retrieval_ignores_stop_words_and_matches_related_word_forms(tmp_path):
+    settings = phase6_settings(tmp_path)
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        user = User(telegram_user_id=42, name="Owner")
+        session.add(user)
+        session.commit()
+        memory = Memory(user_id=user.id, statement="She likes silver accessories")
+        session.add(memory)
+        session.commit()
+        results = retrieve_memories(session, user, "what type of jewelry")
+        query = retrieval_query("what type of jewelry", user)
+    assert results[0].memory.id == memory.id
+    assert query["keywords"] == ["accessory"]
+
+
 def test_bot_pause_state_is_persistent(tmp_path):
     settings = phase6_settings(tmp_path)
     assert not is_paused(settings)
