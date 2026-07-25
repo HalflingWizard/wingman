@@ -1,6 +1,7 @@
 """FastAPI application."""
 
 import json
+from datetime import UTC, datetime
 from html import escape
 
 from fastapi import FastAPI, Form, HTTPException
@@ -15,11 +16,19 @@ from wingman.models import AgentRun, Conversation, ConversationSummary, User
 from wingman.services import (
     add_memory_note,
     confirm_memory,
+    create_event,
     create_memory,
+    create_place,
+    create_reminder,
+    create_saved_idea,
     delete_memory,
     delete_memory_note,
+    list_events,
     list_memories,
     list_memory_notes,
+    list_places,
+    list_reminders,
+    list_saved_ideas,
     update_memory,
     update_memory_note,
 )
@@ -47,7 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<html><head><title>Wingman health</title></head><body>"
             "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
             "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
-            "<a href='/api-calls'>API calls</a> | <a href='/retrieval'>Retrieval</a></nav>"
+            "<a href='/planning'>Planning</a> | <a href='/api-calls'>API calls</a> | "
+            "<a href='/retrieval'>Retrieval</a></nav>"
             f"<h1>Wingman {__version__}</h1><p>Database {database}</p>"
             f"<p>Telegram {telegram}</p><p>OpenAI {openai}</p>"
             "</body></html>"
@@ -73,7 +83,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return (
             "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
             "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
-            "<a href='/api-calls'>API calls</a> | <a href='/retrieval'>Retrieval</a></nav>"
+            "<a href='/planning'>Planning</a> | <a href='/api-calls'>API calls</a> | "
+            "<a href='/retrieval'>Retrieval</a></nav>"
         )
 
     @app.get("/", response_class=HTMLResponse)
@@ -235,6 +246,101 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return (
             f"<html><body>{navigation()}<h1>Retrieval inspector</h1><ul>{rows}</ul></body></html>"
         )
+
+    @app.get("/planning", response_class=HTMLResponse)
+    def planning() -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            places = list_places(session, user, include_deleted=True)
+            ideas = list_saved_ideas(session, user)
+            events = list_events(session, user)
+            reminders = list_reminders(session, user)
+        place_rows = "".join(
+            f"<li><strong>{escape(place.name)}</strong> {escape(place.status)} "
+            f"{escape(place.address)} {escape(place.description)}</li>"
+            for place in places
+        )
+        idea_rows = "".join(
+            f"<li><strong>{escape(idea.title)}</strong> {escape(idea.reason)}</li>"
+            for idea in ideas
+        )
+        event_rows = "".join(
+            f"<li><strong>{escape(event.title)}</strong> {escape(event.start_at.isoformat())} "
+            f"{escape(event.status)}</li>"
+            for event in events
+        )
+        reminder_rows = "".join(
+            f"<li><strong>{escape(reminder.title)}</strong> "
+            f"{escape(reminder.scheduled_at.isoformat())} {escape(reminder.status)}</li>"
+            for reminder in reminders
+        )
+        return (
+            "<html><body>"
+            + navigation()
+            + "<h1>Planning</h1>"
+            + "<h2>Add place</h2><form method='post' action='/planning/places'>"
+            + "<input name='name' placeholder='Name' required>"
+            + "<input name='address' placeholder='Address'>"
+            + "<input name='city' placeholder='City'>"
+            + "<input name='description' placeholder='Description'>"
+            + "<button>Save place</button></form><ul>"
+            + place_rows
+            + "</ul><h2>Add saved idea</h2><form method='post' action='/planning/ideas'>"
+            + "<input name='title' placeholder='Idea' required>"
+            + "<input name='reason' placeholder='Why it fits'>"
+            + "<button>Save idea</button></form><ul>"
+            + idea_rows
+            + "</ul><h2>Add event</h2><form method='post' action='/planning/events'>"
+            + "<input name='title' placeholder='Event' required>"
+            + "<input name='start_at' type='datetime-local' required>"
+            + "<input name='description' placeholder='Description'>"
+            + "<button>Save event</button></form><ul>"
+            + event_rows
+            + "</ul><h2>Add reminder</h2><form method='post' action='/planning/reminders'>"
+            + "<input name='title' placeholder='Reminder' required>"
+            + "<input name='scheduled_at' type='datetime-local' required>"
+            + "<button>Save reminder</button></form><ul>"
+            + reminder_rows
+            + "</ul></body></html>"
+        )
+
+    def parse_datetime(value: str) -> datetime:
+        return datetime.fromisoformat(value).replace(tzinfo=UTC)
+
+    @app.post("/planning/places", response_class=HTMLResponse)
+    def add_place(
+        name: str = Form(...),
+        address: str = Form(""),
+        city: str = Form(""),
+        description: str = Form(""),
+    ) -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            create_place(session, user, name, address, city, description)
+        return planning()
+
+    @app.post("/planning/ideas", response_class=HTMLResponse)
+    def add_idea(title: str = Form(...), reason: str = Form("")) -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            create_saved_idea(session, user, title, reason)
+        return planning()
+
+    @app.post("/planning/events", response_class=HTMLResponse)
+    def add_event(
+        title: str = Form(...), start_at: str = Form(...), description: str = Form("")
+    ) -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            create_event(session, user, title, parse_datetime(start_at), description=description)
+        return planning()
+
+    @app.post("/planning/reminders", response_class=HTMLResponse)
+    def add_reminder(title: str = Form(...), scheduled_at: str = Form(...)) -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            create_reminder(session, user, title, parse_datetime(scheduled_at))
+        return planning()
 
     @app.get("/api-calls", response_class=HTMLResponse)
     def api_calls() -> str:

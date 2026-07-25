@@ -73,7 +73,20 @@ Delivered in Phase 4
 
 ## Phase 5
 
+Status complete
+
 - Add places, saved ideas, events, reminders, and time-aware context.
+
+Delivered in Phase 5
+
+- Added places with addresses, descriptions, source URLs, atmosphere tags, and lifecycle statuses.
+- Added saved date ideas linked to places.
+- Added events with timezone, status, descriptions, and optional places.
+- Added one-time reminders with Telegram delivery tracking.
+- Added the `/planning` page with basic create forms and lists.
+- Added upcoming planning context to Telegram turns.
+- Added a small reminder worker that runs with the Telegram bot.
+- Kept web discovery and restaurant search out of scope. Source URLs are manually saved only.
 
 ## Phase 6
 

@@ -27,6 +27,8 @@ Phase 4 keeps recent raw messages within configurable limits and rolls older mes
 
 The actual Responses API request has three clear layers. Static profile, safety, and time instructions go through `instructions`. Dynamic memory, summary, and pending-state context goes through a separate developer message. Recent user and assistant messages are sent as history, with the current user message appearing once. The API-call page shows these same layers in the stored request snapshot.
 
+Phase 5 stores planning entities in relational tables. The context builder includes a small upcoming window of saved places, unused ideas, planned events, and active reminders. A simple reminder worker polls one-time reminders and sends due items through Telegram, then marks successful delivery. No external discovery or autonomous browsing is used.
+
 ## Process lifecycle
 
 The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. A later phase will add dashboard lifecycle controls.

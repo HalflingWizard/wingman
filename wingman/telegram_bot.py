@@ -33,6 +33,7 @@ from wingman.services import (
     mark_card_cleaned,
     mark_card_deleted,
     pending_deleted_cards,
+    planning_context,
     save_summary,
     save_telegram_card,
     set_memory_embedding,
@@ -167,6 +168,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             log_retrieval(session, user, conversation, retrieval_query(message.text, user), results)
             summary = get_or_create_summary(session, conversation)
             pending_state = get_open_pending_state(session, user, conversation)
+            places, ideas, events, reminders = planning_context(session, user)
             summary_start = 0
             if summary.summarized_through_message_id:
                 for index, item in enumerate(conversation.messages):
@@ -246,6 +248,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 primary_person_name=settings.primary_person_name,
                 summary=summary,
                 pending_state=pending_state,
+                places=places,
+                ideas=ideas,
+                events=events,
+                reminders=reminders,
                 max_messages=settings.recent_message_limit,
                 token_budget=settings.context_token_budget,
             )

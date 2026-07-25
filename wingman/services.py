@@ -1,7 +1,7 @@
 """Persistence and validated domain services."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -11,10 +11,14 @@ from wingman.models import (
     AgentRun,
     Conversation,
     ConversationSummary,
+    Event,
     Memory,
     MemoryNote,
     Message,
     PendingState,
+    Place,
+    Reminder,
+    SavedIdea,
     SummaryUpdate,
     TelegramCard,
     ToolExecution,
@@ -236,6 +240,217 @@ def delete_memory_note(session: Session, user: User, note_id: str) -> None:
         raise ValueError("Memory note does not exist")
     session.delete(note)
     session.commit()
+
+
+PLACE_STATUSES = {"candidate", "saved", "visited", "dismissed", "deleted"}
+EVENT_STATUSES = {"planned", "completed", "cancelled"}
+REMINDER_STATUSES = {"scheduled", "completed", "cancelled"}
+
+
+def _owned(session: Session, model: type[Any], user: User, record_id: str) -> Any:
+    record = session.get(model, record_id)
+    if record is None or record.user_id != user.id:
+        raise ValueError("Record does not exist")
+    return record
+
+
+def create_place(
+    session: Session,
+    user: User,
+    name: str,
+    address: str = "",
+    city: str = "",
+    description: str = "",
+    place_type: str = "place",
+    status: str = "candidate",
+    source_url: str = "",
+    atmosphere_tags: str = "",
+) -> Place:
+    if not name.strip() or len(name) > 200 or status not in PLACE_STATUSES:
+        raise ValueError("Invalid place")
+    place = Place(
+        user_id=user.id,
+        name=name.strip(),
+        address=address.strip(),
+        city=city.strip(),
+        description=description.strip(),
+        place_type=place_type.strip() or "place",
+        status=status,
+        source_url=source_url.strip(),
+        atmosphere_tags=atmosphere_tags.strip(),
+    )
+    session.add(place)
+    session.commit()
+    session.refresh(place)
+    return place
+
+
+def list_places(session: Session, user: User, include_deleted: bool = False) -> list[Place]:
+    query = select(Place).where(Place.user_id == user.id).order_by(Place.updated_at.desc())
+    if not include_deleted:
+        query = query.where(Place.status != "deleted")
+    return list(session.scalars(query))
+
+
+def update_place(session: Session, user: User, place_id: str, **fields: Any) -> Place:
+    place = session.get(Place, place_id)
+    if place is None or place.user_id != user.id:
+        raise ValueError("Record does not exist")
+    allowed = {
+        "name",
+        "address",
+        "city",
+        "description",
+        "place_type",
+        "status",
+        "source_url",
+        "atmosphere_tags",
+    }
+    if set(fields) - allowed or fields.get("status", place.status) not in PLACE_STATUSES:
+        raise ValueError("Invalid place fields")
+    for key, value in fields.items():
+        setattr(place, key, value.strip() if isinstance(value, str) else value)
+    place.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(place)
+    return place
+
+
+def create_saved_idea(
+    session: Session,
+    user: User,
+    title: str,
+    reason: str = "",
+    place_id: str | None = None,
+) -> SavedIdea:
+    if not title.strip() or len(title) > 200:
+        raise ValueError("Invalid saved idea")
+    if place_id is not None:
+        _owned(session, Place, user, place_id)
+    idea = SavedIdea(user_id=user.id, title=title.strip(), reason=reason.strip(), place_id=place_id)
+    session.add(idea)
+    session.commit()
+    session.refresh(idea)
+    return idea
+
+
+def list_saved_ideas(session: Session, user: User) -> list[SavedIdea]:
+    return list(
+        session.scalars(
+            select(SavedIdea)
+            .where(SavedIdea.user_id == user.id)
+            .order_by(SavedIdea.updated_at.desc())
+        )
+    )
+
+
+def create_event(
+    session: Session,
+    user: User,
+    title: str,
+    start_at: datetime,
+    event_type: str = "event",
+    timezone: str = "UTC",
+    description: str = "",
+    place_id: str | None = None,
+) -> Event:
+    if not title.strip() or len(title) > 200:
+        raise ValueError("Invalid event")
+    if place_id is not None:
+        _owned(session, Place, user, place_id)
+    event = Event(
+        user_id=user.id,
+        title=title.strip(),
+        start_at=start_at,
+        event_type=event_type.strip() or "event",
+        timezone=timezone.strip() or "UTC",
+        description=description.strip(),
+        place_id=place_id,
+    )
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def list_events(session: Session, user: User, upcoming_only: bool = False) -> list[Event]:
+    query = select(Event).where(Event.user_id == user.id).order_by(Event.start_at)
+    if upcoming_only:
+        query = query.where(Event.status == "planned", Event.start_at >= datetime.now(UTC))
+    return list(session.scalars(query))
+
+
+def create_reminder(
+    session: Session,
+    user: User,
+    title: str,
+    scheduled_at: datetime,
+    timezone: str = "UTC",
+    event_id: str | None = None,
+) -> Reminder:
+    if not title.strip() or len(title) > 200:
+        raise ValueError("Invalid reminder")
+    if event_id is not None:
+        _owned(session, Event, user, event_id)
+    reminder = Reminder(
+        user_id=user.id,
+        title=title.strip(),
+        scheduled_at=scheduled_at,
+        timezone=timezone.strip() or "UTC",
+        event_id=event_id,
+    )
+    session.add(reminder)
+    session.commit()
+    session.refresh(reminder)
+    return reminder
+
+
+def list_reminders(session: Session, user: User, active_only: bool = False) -> list[Reminder]:
+    query = select(Reminder).where(Reminder.user_id == user.id).order_by(Reminder.scheduled_at)
+    if active_only:
+        query = query.where(Reminder.status == "scheduled")
+    return list(session.scalars(query))
+
+
+def mark_reminder_delivered(session: Session, reminder_id: str) -> Reminder:
+    reminder = session.get(Reminder, reminder_id)
+    if reminder is None:
+        raise ValueError("Reminder does not exist")
+    reminder.status = "completed"
+    reminder.delivery_status = "sent"
+    reminder.last_triggered_at = datetime.now(UTC)
+    reminder.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(reminder)
+    return reminder
+
+
+def planning_context(
+    session: Session, user: User
+) -> tuple[list[Place], list[SavedIdea], list[Event], list[Reminder]]:
+    now = datetime.now(UTC)
+    horizon = now + timedelta(days=90)
+    places = [
+        place for place in list_places(session, user) if place.status in {"candidate", "saved"}
+    ]
+    ideas = [idea for idea in list_saved_ideas(session, user) if not idea.used]
+    events = [
+        event
+        for event in list_events(session, user)
+        if event.status == "planned"
+        and _as_utc(event.start_at) >= now
+        and _as_utc(event.start_at) <= horizon
+    ]
+    reminders = [
+        reminder
+        for reminder in list_reminders(session, user, active_only=True)
+        if _as_utc(reminder.scheduled_at) >= now and _as_utc(reminder.scheduled_at) <= horizon
+    ]
+    return places[:10], ideas[:10], events[:10], reminders[:10]
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def set_memory_embedding(

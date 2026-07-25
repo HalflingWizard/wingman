@@ -10,8 +10,9 @@ from pathlib import Path
 import uvicorn
 
 from wingman import __version__
-from wingman.config import get_settings
+from wingman.config import Settings, get_settings
 from wingman.database import initialize_database
+from wingman.reminder_worker import run_reminder_worker
 from wingman.telegram_bot import run_bot
 from wingman.web import create_app
 
@@ -44,13 +45,17 @@ def start(no_browser: bool) -> None:
     if not no_browser:
         webbrowser.open(address)
     if settings.telegram_bot_token and settings.telegram_owner_id is not None:
-        asyncio.run(run_bot(settings))
+        asyncio.run(run_services(settings))
     else:
         print("Telegram is not configured. The health page remains available.")
         try:
             signal.pause()
         except KeyboardInterrupt:
             pass
+
+
+async def run_services(settings: Settings) -> None:
+    await asyncio.gather(run_bot(settings), run_reminder_worker(settings))
 
 
 def main() -> None:

@@ -4,7 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from wingman.models import Conversation, ConversationSummary, PendingState, User
+from wingman.models import (
+    Conversation,
+    ConversationSummary,
+    Event,
+    PendingState,
+    Place,
+    Reminder,
+    SavedIdea,
+    User,
+)
 from wingman.retrieval import RetrievalResult
 
 
@@ -28,6 +37,10 @@ def build_context(
     primary_person_name: str = "",
     summary: ConversationSummary | None = None,
     pending_state: PendingState | None = None,
+    places: list[Place] | None = None,
+    ideas: list[SavedIdea] | None = None,
+    events: list[Event] | None = None,
+    reminders: list[Reminder] | None = None,
     max_messages: int = 20,
     max_memories: int = 8,
     token_budget: int = 4000,
@@ -53,6 +66,28 @@ def build_context(
         dynamic_parts.insert(0, f"Conversation summary:\n{summary.summary_text}")
     if pending_state is not None:
         dynamic_parts.append(f"Pending question:\n{pending_state.question_asked}")
+    if places:
+        dynamic_parts.append(
+            "Saved places:\n"
+            + "\n".join(f"- {place.name}. {place.description}" for place in places)
+        )
+    if ideas:
+        dynamic_parts.append(
+            "Saved ideas:\n" + "\n".join(f"- {idea.title}. {idea.reason}" for idea in ideas)
+        )
+    if events:
+        dynamic_parts.append(
+            "Upcoming events:\n"
+            + "\n".join(f"- {event.title} at {event.start_at.isoformat()}" for event in events)
+        )
+    if reminders:
+        dynamic_parts.append(
+            "Upcoming reminders:\n"
+            + "\n".join(
+                f"- {reminder.title} at {reminder.scheduled_at.isoformat()}"
+                for reminder in reminders
+            )
+        )
     dynamic = "\n\n".join(dynamic_parts)
     messages = [(message.sender, message.text) for message in conversation.messages[-max_messages:]]
     while (
