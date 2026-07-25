@@ -216,7 +216,7 @@ Delivered in Phase 8
 
 ### Phase 9
 
-Status planned
+Status complete
 
 Memory relationships, provenance, and context quality
 
@@ -233,6 +233,15 @@ Acceptance requirements
 - The API inspector clearly shows static context, dynamic context, retrieved records, tool calls, and final messages as separate sections.
 - A memory can be traced from the assistant response to the retrieved record and then to its notes and source message.
 - Context is short enough to fit the configured budget and strong enough to support the answer.
+
+Delivered in Phase 9
+
+- Added the editable `prompts/wingman.md` conversation-style file with a configurable path.
+- Kept application safety, privacy, memory, and tool rules outside the editable prompt.
+- Added retrieved memory notes and source message IDs to dynamic model context.
+- Added note details to retrieval inspection candidates.
+- Added a heuristic context-usage summary to API response snapshots.
+- Kept retrieval query and candidate data in fixed-height highlighted code panels with copy buttons.
 
 ### Phase 10
 

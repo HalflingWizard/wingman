@@ -6,9 +6,10 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from wingman.models import Conversation, Memory, User
+from wingman.models import Conversation, Memory, MemoryNote, User
 from wingman.services import list_memories
 
 WORD_RE = re.compile(r"[a-z0-9']+")
@@ -52,6 +53,7 @@ class RetrievalResult:
     importance: float
     confidence: float
     recency: float
+    notes: tuple[MemoryNote, ...] = ()
 
 
 def _stem(word: str) -> str:
@@ -108,6 +110,13 @@ def retrieve_memories(
     now = datetime.now(UTC)
     for memory in list_memories(session, user):
         memory_words = _words(f"{memory.statement} {memory.embedding_text or ''}")
+        notes = tuple(
+            session.scalars(
+                select(MemoryNote)
+                .where(MemoryNote.memory_id == memory.id)
+                .order_by(MemoryNote.created_at)
+            )
+        )
         keyword_match = len(query_words & memory_words) / max(1, len(query_words))
         semantic_similarity = _semantic_similarity(memory, query_vector)
         updated_at = memory.updated_at
@@ -134,6 +143,7 @@ def retrieve_memories(
                     importance,
                     memory.confidence,
                     recency,
+                    notes,
                 )
             )
     results.sort(key=lambda item: (-item.score, -item.memory.updated_at.timestamp()))
@@ -172,6 +182,15 @@ def log_retrieval(
             "importance": result.importance,
             "confidence": result.confidence,
             "recency": result.recency,
+            "notes": [
+                {
+                    "note_id": note.id,
+                    "text": note.text,
+                    "note_type": note.note_type,
+                    "source_message_id": note.source_message_id,
+                }
+                for note in result.notes
+            ],
         }
         for result in results
     ]
@@ -185,3 +204,17 @@ def log_retrieval(
     )
     session.add(log)
     session.commit()
+
+
+def retrieval_context_usage(results: list[RetrievalResult], answer: str) -> dict[str, object]:
+    answer_words = _words(answer)
+    retrieved_ids = [result.memory.id for result in results]
+    used_ids = [
+        result.memory.id for result in results if _words(result.memory.statement) & answer_words
+    ]
+    return {
+        "retrieved_memory_ids": retrieved_ids,
+        "mentioned_memory_ids": used_ids,
+        "unmentioned_memory_ids": [item for item in retrieved_ids if item not in used_ids],
+        "method": "word-overlap heuristic",
+    }

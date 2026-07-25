@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     user_name: str = ""
     primary_person_name: str = ""
     timezone: str = "UTC"
+    prompt_file: str = "prompts/wingman.md"
     data_dir: str = "./data"
     log_dir: str = "./logs"
 

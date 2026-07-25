@@ -14,6 +14,8 @@ Phase 7 is now implemented on top of the `1.0.0` baseline. The default conversat
 
 Phase 8 adds natural memory proposals. The assistant can ask whether to save a personal observation, save it only after a clear yes, dismiss it after a no, and attach a source note to model-created memories.
 
+Phase 9 adds an editable conversation prompt at `prompts/wingman.md`. Change this file to adjust tone and style. Core safety, privacy, memory validation, and tool rules remain application-controlled. Retrieval context now includes notes and source links, and the API inspector records whether retrieved memories appear in the answer.
+
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 
 Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.

@@ -43,6 +43,8 @@ Memories will gain stronger provenance. A useful memory should be connected to t
 
 Phase 8 begins this provenance flow. A personal observation can become a pending memory proposal instead of an immediate write. The proposal expires, can be dismissed, and is completed only after a clear owner confirmation. Model-created memories receive a source note linked to the current message, and visible Telegram cards keep the owner aware of the saved result.
 
+Phase 9 separates editable conversation style from application policy. The owner can change `prompts/wingman.md`, while safety, privacy, memory validation, and tool rules remain in code. Retrieved memories carry their notes and source message IDs into dynamic context. The API response snapshot includes a simple word-overlap check showing which retrieved memory statements were mentioned in the answer.
+
 The dashboard will become a shared visual workspace. It will use a small consistent style system, Font Awesome icons with accessible labels, readable memory cards, timeline-style notes, useful status summaries, and expandable diagnostic details. Raw JSON and prompt content will remain available in scrollable inspection panels.
 
 ## Process lifecycle

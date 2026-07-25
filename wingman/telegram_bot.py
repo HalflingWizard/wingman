@@ -21,7 +21,13 @@ from wingman.database import session_factory
 from wingman.lifecycle import is_paused
 from wingman.model_client import MEMORY_TOOLS, ModelClient
 from wingman.models import Memory, now_utc
-from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
+from wingman.prompting import load_prompt
+from wingman.retrieval import (
+    log_retrieval,
+    retrieval_context_usage,
+    retrieval_query,
+    retrieve_memories,
+)
 from wingman.services import (
     add_message,
     create_agent_run,
@@ -263,6 +269,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 ideas=ideas,
                 events=events,
                 reminders=reminders,
+                prompt_text=load_prompt(settings),
                 max_messages=settings.recent_message_limit,
                 token_budget=settings.context_token_budget,
             )
@@ -329,7 +336,11 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 "completed",
                 round((perf_counter() - started) * 1000),
                 response_snapshot=json.dumps(
-                    {"answer": answer, "tool_calls": model_client.last_tool_trace},
+                    {
+                        "answer": answer,
+                        "tool_calls": model_client.last_tool_trace,
+                        "context_usage": retrieval_context_usage(results, answer),
+                    },
                     ensure_ascii=False,
                 ),
                 request_snapshot=json.dumps(model_client.last_request_snapshot, ensure_ascii=False),
