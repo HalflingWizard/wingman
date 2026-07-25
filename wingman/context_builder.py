@@ -61,6 +61,9 @@ def build_context(
         "about the people or relationship. A message such as she told me she likes tomatoes "
         "is worth saving as an observed or inferred preference. Before creating a memory, "
         "search for a related existing memory. Add a note instead of creating a duplicate. "
+        "For Matt's own subjective opinion or a useful observation that he has not asked to "
+        "save, propose the memory first and ask permission. If he agrees, save the exact "
+        "proposal. If he declines, dismiss it and move on naturally. "
         "Use confirmed only when Matt clearly confirms the detail. When a memory tool is "
         "used, continue the conversation naturally and do not mention tools, scores, IDs, "
         "or database operations. "
@@ -74,7 +77,15 @@ def build_context(
     if summary is not None and summary.summary_text:
         dynamic_parts.insert(0, f"Conversation summary:\n{summary.summary_text}")
     if pending_state is not None:
-        dynamic_parts.append(f"Pending question:\n{pending_state.question_asked}")
+        if pending_state.state_type == "memory_proposal":
+            dynamic_parts.append(
+                "Pending memory proposal:\n"
+                f"{pending_state.missing_information}\n"
+                "The assistant has asked whether to save this. If Matt clearly agrees, "
+                "create this memory. If he declines, dismiss the proposal."
+            )
+        else:
+            dynamic_parts.append(f"Pending question:\n{pending_state.question_asked}")
     if places:
         dynamic_parts.append(
             "Saved places:\n"

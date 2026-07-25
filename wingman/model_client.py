@@ -28,6 +28,33 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "propose_memory",
+        "description": (
+            "Ask the owner whether to save an uncertain personal observation or preference. "
+            "Use this before saving a detail such as Matt's opinion about someone's clothing."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "memory_type": {"type": "string"},
+                "status": {"type": "string", "enum": ["observed", "inferred", "uncertain"]},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+            },
+            "required": [
+                "statement",
+                "memory_type",
+                "status",
+                "confidence",
+                "importance",
+            ],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
         "name": "create_memory",
         "description": "Create a saved memory after the user clearly states a durable detail.",
         "parameters": {
@@ -98,6 +125,18 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "dismiss_memory_proposal",
+        "description": "Dismiss the open memory proposal when the owner declines to save it.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
         "name": "confirm_memory",
         "description": "Confirm an inferred memory after the user clearly confirms it.",
         "parameters": {
@@ -138,8 +177,13 @@ class ModelClient:
             "create_memory for a clear durable preference or fact, including a direct "
             "reported preference such as she told me she likes tomatoes. Do not create "
             "memories for greetings, generic brainstorming, temporary plans, or minor "
-            "conversation details. Use observed or inferred for a new unconfirmed detail. "
+            "conversation details. For Matt's own subjective opinion or an observation he "
+            "has not asked to save, use propose_memory first. Use observed or inferred for "
+            "a new unconfirmed detail. "
             "Use add_memory_note when new evidence supports an existing memory. Use "
+            "propose_memory for a personal observation or preference that should be saved "
+            "only after Matt agrees. If there is an open proposal, use the exact proposed "
+            "statement when Matt agrees, or dismiss_memory_proposal when he declines. "
             "confirm_memory only after the user confirms it. Keep the final reply natural "
             "and never mention the internal tool call. "
             f"The user's name is {user_name or 'the user'}. The person discussed is "

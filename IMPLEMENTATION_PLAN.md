@@ -173,7 +173,7 @@ Acceptance examples
 
 ### Phase 8
 
-Status planned
+Status complete
 
 Natural memory conversation and evidence collection
 
@@ -204,6 +204,15 @@ Acceptance requirements
 - The bot never silently converts one observation into a confirmed preference.
 - Every saved memory card has a clear delete action.
 - Every note explains where and when the evidence came from when that information is available.
+
+Delivered in Phase 8
+
+- Added `propose_memory` for uncertain personal observations and preferences.
+- Added pending memory proposals with expiration, confirmation, and dismissal behavior.
+- Added exact proposal context to the next model turn so a clear yes can save the proposed statement.
+- Added automatic source notes for model-created memories and notes linked to the current message.
+- Added visible Telegram cards for memories created through model tools.
+- Added tests for proposal state, dismissal, confirmation, source notes, and the natural tool flow.
 
 ### Phase 9
 

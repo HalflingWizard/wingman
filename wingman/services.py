@@ -172,6 +172,7 @@ def add_memory_note(
     text: str,
     note_type: str = "evidence",
     confidence: float | None = None,
+    source_message_id: str | None = None,
 ) -> MemoryNote:
     memory = get_owned_memory(session, user, memory_id)
     if memory is None or memory.status == "deleted":
@@ -186,6 +187,7 @@ def add_memory_note(
         memory_id=memory.id,
         text=text.strip(),
         note_type=note_type,
+        source_message_id=source_message_id,
         confidence=confidence,
     )
     session.add(note)

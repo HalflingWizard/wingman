@@ -41,6 +41,8 @@ Memory retrieval and memory actions are separate concerns. Search is read-only a
 
 Memories will gain stronger provenance. A useful memory should be connected to the message, conversation, event, date, or observation that supports it. Notes should preserve additional evidence instead of creating duplicate memories. The assistant should use that structure to ask natural follow-up questions and compare new observations with existing context.
 
+Phase 8 begins this provenance flow. A personal observation can become a pending memory proposal instead of an immediate write. The proposal expires, can be dismissed, and is completed only after a clear owner confirmation. Model-created memories receive a source note linked to the current message, and visible Telegram cards keep the owner aware of the saved result.
+
 The dashboard will become a shared visual workspace. It will use a small consistent style system, Font Awesome icons with accessible labels, readable memory cards, timeline-style notes, useful status summaries, and expandable diagnostic details. Raw JSON and prompt content will remain available in scrollable inspection panels.
 
 ## Process lifecycle

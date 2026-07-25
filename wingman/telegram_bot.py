@@ -167,10 +167,14 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
             except Exception:
                 pass
+        user_message_id: str | None = None
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
             conversation = get_or_create_conversation(session, user)
-            add_message(session, conversation, "user", message.text, message.message_id)
+            user_message = add_message(
+                session, conversation, "user", message.text, message.message_id
+            )
+            user_message_id = user_message.id
             results = retrieve_memories(session, user, message.text, query_vector=query_vector)
             log_retrieval(session, user, conversation, retrieval_query(message.text, user), results)
             summary = get_or_create_summary(session, conversation)
@@ -286,7 +290,14 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         def execute_model_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             with sessions() as session:
                 user = get_or_create_user(session, owner_id)
-                executor = MemoryToolExecutor(session, user, agent_run_id=run.id)
+                conversation = get_or_create_conversation(session, user)
+                executor = MemoryToolExecutor(
+                    session,
+                    user,
+                    agent_run_id=run.id,
+                    conversation=conversation,
+                    source_message_id=user_message_id,
+                )
                 return executor.execute(name, arguments)
 
         try:

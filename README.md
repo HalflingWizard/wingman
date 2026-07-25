@@ -12,6 +12,8 @@ The Phase 1 through Phase 6 implementation is included in version `1.0.0`. It pr
 
 Phase 7 is now implemented on top of the `1.0.0` baseline. The default conversation and summary model is `gpt-5-nano`, with low reasoning effort and concise output. The model can request validated memory searches and controlled memory changes. Tool calls are audited and shown in the API-call inspector. Memory deletion remains an explicit owner action.
 
+Phase 8 adds natural memory proposals. The assistant can ask whether to save a personal observation, save it only after a clear yes, dismiss it after a no, and attach a source note to model-created memories.
+
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 
 Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.

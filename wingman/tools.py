@@ -1,17 +1,20 @@
 """Validated model action tools."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from wingman.models import User
+from wingman.models import Conversation, User
 from wingman.retrieval import retrieve_memories
 from wingman.services import (
     add_memory_note,
     confirm_memory,
     create_memory,
+    create_pending_state,
     delete_memory,
+    get_open_pending_state,
     get_owned_memory,
     list_memory_notes,
     record_tool_execution,
@@ -48,11 +51,28 @@ class SearchMemoriesInput(BaseModel):
     top_k: int = Field(default=5, ge=1, le=8)
 
 
+class ProposeMemoryInput(BaseModel):
+    statement: str = Field(min_length=1, max_length=4000)
+    memory_type: str = Field(default="observation", max_length=40)
+    status: str = Field(default="inferred", pattern="^(observed|inferred|uncertain)$")
+    confidence: float = Field(default=0.7, ge=0, le=1)
+    importance: int = Field(default=3, ge=1, le=5)
+
+
 class MemoryToolExecutor:
-    def __init__(self, session: Session, user: User, agent_run_id: str | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        user: User,
+        agent_run_id: str | None = None,
+        conversation: Conversation | None = None,
+        source_message_id: str | None = None,
+    ) -> None:
         self.session = session
         self.user = user
         self.agent_run_id = agent_run_id
+        self.conversation = conversation
+        self.source_message_id = source_message_id
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -96,6 +116,82 @@ class MemoryToolExecutor:
             if name == "create_memory":
                 create_data = CreateMemoryInput.model_validate(arguments)
                 memory = create_memory(self.session, self.user, **create_data.model_dump())
+                if self.conversation is not None:
+                    pending = get_open_pending_state(self.session, self.user, self.conversation)
+                    if pending is not None and pending.state_type == "memory_proposal":
+                        pending.status = "completed"
+                        self.session.commit()
+                if self.source_message_id is not None:
+                    add_memory_note(
+                        self.session,
+                        self.user,
+                        memory.id,
+                        "Captured from the owner's message.",
+                        note_type="source",
+                        source_message_id=self.source_message_id,
+                    )
+            elif name == "propose_memory":
+                if self.conversation is None:
+                    raise ValueError("A conversation is required for a memory proposal")
+                proposal = ProposeMemoryInput.model_validate(arguments)
+                existing = get_open_pending_state(self.session, self.user, self.conversation)
+                if existing is not None and existing.state_type == "memory_proposal":
+                    output = {
+                        "pending_state_id": existing.id,
+                        "statement": existing.missing_information,
+                        "status": "already_proposed",
+                    }
+                    record_tool_execution(
+                        self.session,
+                        self.user,
+                        name,
+                        arguments,
+                        output_data=output,
+                        agent_run_id=self.agent_run_id,
+                    )
+                    return output
+                state = create_pending_state(
+                    self.session,
+                    self.user,
+                    self.conversation,
+                    "memory_proposal",
+                    proposal.statement,
+                    f"Would you like me to save this memory? {proposal.statement}",
+                    datetime.now(UTC) + timedelta(hours=24),
+                )
+                output = {
+                    "pending_state_id": state.id,
+                    "statement": proposal.statement,
+                    "status": "awaiting_confirmation",
+                }
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
+            elif name == "dismiss_memory_proposal":
+                if self.conversation is None:
+                    raise ValueError("A conversation is required to dismiss a proposal")
+                pending = get_open_pending_state(self.session, self.user, self.conversation)
+                if pending is None or pending.state_type != "memory_proposal":
+                    output = {"dismissed": False}
+                else:
+                    pending.status = "dismissed"
+                    self.session.commit()
+                    output = {"dismissed": True}
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
             elif name == "update_memory":
                 update_data = UpdateMemoryInput.model_validate(arguments)
                 fields = update_data.model_dump(exclude_none=True)
@@ -109,7 +205,12 @@ class MemoryToolExecutor:
                 memory = confirm_memory(self.session, self.user, str(arguments["memory_id"]))
             elif name == "add_memory_note":
                 note_data = AddMemoryNoteInput.model_validate(arguments)
-                add_memory_note(self.session, self.user, **note_data.model_dump())
+                add_memory_note(
+                    self.session,
+                    self.user,
+                    **note_data.model_dump(),
+                    source_message_id=self.source_message_id,
+                )
                 note_memory = get_owned_memory(self.session, self.user, note_data.memory_id)
                 if note_memory is None:
                     raise ValueError("Memory does not exist")
