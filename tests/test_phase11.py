@@ -37,8 +37,8 @@ def test_settings_are_editable_without_revealing_secrets(tmp_path, monkeypatch):
             "openai_api_key": "new-key",
             "openai_main_model": "gpt-5-nano",
             "openai_summary_model": "gpt-5-nano",
-            "user_name": "Matt",
-            "primary_person_name": "Chloe",
+            "user_name": "Odysseus",
+            "primary_person_name": "Penelope",
             "timezone": "UTC",
         },
     )
@@ -52,10 +52,10 @@ def test_system_pause_toggle_and_json_import(tmp_path, monkeypatch):
     settings = Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
     initialize_database(settings)
     with session_factory(settings)() as session:
-        user = User(telegram_user_id=42, name="Matt")
+        user = User(telegram_user_id=42, name="Odysseus")
         session.add(user)
         session.commit()
-        session.add(Memory(user_id=user.id, statement="Chloe likes pizza"))
+        session.add(Memory(user_id=user.id, statement="Penelope likes pizza"))
         session.commit()
         payload = export_user_data(session, user)
     client = TestClient(create_app(settings))

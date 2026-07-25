@@ -31,7 +31,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         "name": "propose_memory",
         "description": (
             "Ask the owner whether to save an uncertain personal observation or preference. "
-            "Use this before saving a detail such as Matt's opinion about someone's clothing."
+            "Use this before saving a detail such as Odysseus's opinion about someone's clothing."
         ),
         "parameters": {
             "type": "object",
@@ -177,13 +177,16 @@ class ModelClient:
             "create_memory for a clear durable preference or fact, including a direct "
             "reported preference such as she told me she likes tomatoes. Do not create "
             "memories for greetings, generic brainstorming, temporary plans, or minor "
-            "conversation details. For Matt's own subjective opinion or an observation he "
+            "conversation details. For Odysseus's own subjective opinion or an observation he "
             "has not asked to save, use propose_memory first. Use observed or inferred for "
             "a new unconfirmed detail. "
+            "When one message contains several distinct durable details, handle each safe "
+            "detail and use multiple tool calls when appropriate. Do not stop after the "
+            "first valid memory action. "
             "Use add_memory_note when new evidence supports an existing memory. Use "
             "propose_memory for a personal observation or preference that should be saved "
-            "only after Matt agrees. If there is an open proposal, use the exact proposed "
-            "statement when Matt agrees, or dismiss_memory_proposal when he declines. "
+            "only after Odysseus agrees. If there is an open proposal, use the exact proposed "
+            "statement when Odysseus agrees, or dismiss_memory_proposal when he declines. "
             "confirm_memory only after the user confirms it. Keep the final reply natural "
             "and never mention the internal tool call. "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
@@ -214,7 +217,7 @@ class ModelClient:
         if tool_executor is not None:
             request["tools"] = MEMORY_TOOLS
             request["tool_choice"] = "auto"
-            request["parallel_tool_calls"] = False
+            request["parallel_tool_calls"] = True
         self.last_request_snapshot = request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:

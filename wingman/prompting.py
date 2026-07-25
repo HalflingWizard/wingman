@@ -6,7 +6,8 @@ from wingman.config import Settings
 
 DEFAULT_PROMPT = (
     "Be warm, natural, concise, and attentive. Use the owner's name when it feels natural. "
-    "Ask one useful follow-up question at a time. Explain suggestions in ordinary language."
+    "Explain suggestions in ordinary language and stay active when several useful actions "
+    "are possible."
 )
 
 

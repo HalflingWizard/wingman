@@ -18,6 +18,7 @@ from aiogram.types import (
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
+from wingman.inbound import InboundMessage
 from wingman.lifecycle import is_paused
 from wingman.model_client import MEMORY_TOOLS, ModelClient
 from wingman.models import Memory, now_utc
@@ -147,7 +148,16 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
         if not message.text:
+            await message.answer(
+                "I can process text messages right now. Voice messages and other media support "
+                "will be added soon."
+            )
             return
+        inbound = InboundMessage(
+            text=message.text,
+            source_type="telegram_text",
+            provider_message_id=message.message_id,
+        )
         owner_id = message.from_user.id
         if is_paused(settings):
             await message.answer("I am paused for now. I will be back soon.")
@@ -169,7 +179,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         if model_client is not None:
             try:
                 query_vector = await model_client.embed(
-                    message.text, settings.openai_embedding_model
+                    inbound.text, settings.openai_embedding_model
                 )
             except Exception:
                 pass
@@ -178,11 +188,11 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
             conversation = get_or_create_conversation(session, user)
             user_message = add_message(
-                session, conversation, "user", message.text, message.message_id
+                session, conversation, "user", inbound.text, message.message_id
             )
             user_message_id = user_message.id
-            results = retrieve_memories(session, user, message.text, query_vector=query_vector)
-            log_retrieval(session, user, conversation, retrieval_query(message.text, user), results)
+            results = retrieve_memories(session, user, inbound.text, query_vector=query_vector)
+            log_retrieval(session, user, conversation, retrieval_query(inbound.text, user), results)
             summary = get_or_create_summary(session, conversation)
             pending_state = get_open_pending_state(session, user, conversation)
             places, ideas, events, reminders = planning_context(session, user)
@@ -259,7 +269,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             built_context = build_context(
                 user,
                 conversation,
-                message.text,
+                inbound.text,
                 results,
                 settings.timezone,
                 primary_person_name=settings.primary_person_name,
@@ -280,7 +290,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         request_snapshot = json.dumps(
             {
                 "system_prompt": built_context.static_context,
-                "user_prompt": message.text,
+                "user_prompt": inbound.text,
                 "context_added": built_context.dynamic_context,
                 "recent_messages": history,
                 "estimated_context_tokens": built_context.estimated_tokens,

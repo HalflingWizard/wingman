@@ -55,7 +55,7 @@ It should support conversations such as this.
 ```text
 User
 
-I found a restaurant called Casa Verde. I think Chloe might like it.
+I found a restaurant called Casa Verde. I think Penelope might like it.
 
 Bot
 
@@ -83,7 +83,7 @@ Bot memory card
 
 125 Main Street
 Quiet and romantic
-Possible date place for Chloe
+Possible date place for Penelope
 
 [Delete]
 ```
@@ -93,7 +93,7 @@ Several weeks later, this should be possible.
 ```text
 User
 
-Chloe finished her exams. I want to take her somewhere relaxing. Where should we go?
+Penelope finished her exams. I want to take her somewhere relaxing. Where should we go?
 
 Bot
 
@@ -105,7 +105,7 @@ The assistant should also support observations and uncertain inferences.
 ```text
 User
 
-Chloe posted a quote from Solaris on her story.
+Penelope posted a quote from Solaris on her story.
 
 Bot
 
@@ -113,13 +113,13 @@ Interesting. That might mean she likes science-fiction novels, although one post
 
 Bot memory card
 
-📖 Chloe shared a quote from Solaris
+📖 Penelope shared a quote from Solaris
 
 [Delete]
 
 Bot memory card
 
-💭 Chloe may like science-fiction novels
+💭 Penelope may like science-fiction novels
 
 Based on her Solaris story
 
@@ -570,8 +570,8 @@ It must not treat the other person as an optimization target.
 The assistant should separate these ideas carefully.
 
 ```text
-Matt likes Chloe's black dress.
-Chloe likes black dresses.
+Odysseus likes Penelope's black dress.
+Penelope likes black dresses.
 ```
 
 The first statement does not imply the second.
@@ -800,13 +800,13 @@ interpretation
 Example memory
 
 ```text
-Chloe appears to like small silver earrings.
+Penelope appears to like small silver earrings.
 ```
 
 Example notes
 
 ```text
-She wore them at Sara's birthday.
+She wore them at Helena's birthday.
 She wore the same pair on the Italian dinner date.
 ```
 
@@ -969,13 +969,13 @@ Each item should have one concise embedding text assembled from its structured f
 Example memory embedding text
 
 ```text
-Chloe may like science-fiction novels. Evidence. She shared a quote from Solaris on Instagram.
+Penelope may like science-fiction novels. Evidence. She shared a quote from Solaris on Instagram.
 ```
 
 Example place embedding text
 
 ```text
-Casa Verde. Restaurant at 125 Main Street. Quiet and romantic. Matt saved it as a possible date place for Chloe.
+Casa Verde. Restaurant at 125 Main Street. Quiet and romantic. Odysseus saved it as a possible date place for Penelope.
 ```
 
 The structured database fields remain the source of truth.
@@ -1494,8 +1494,8 @@ Create fixtures representing complete situations.
 Initial state
 
 ```text
-Casa Verde is saved as a quiet, romantic restaurant for Chloe.
-Chloe recently completed exams.
+Casa Verde is saved as a quiet, romantic restaurant for Penelope.
+Penelope recently completed exams.
 The place has not been visited.
 ```
 
@@ -1510,7 +1510,7 @@ Expected behavior
 ```text
 Casa Verde should be retrieved.
 The assistant should explain why it fits.
-The assistant must not claim that Chloe already visited it.
+The assistant must not claim that Penelope already visited it.
 No duplicate place should be created.
 ```
 
@@ -1519,13 +1519,13 @@ No duplicate place should be created.
 User message
 
 ```text
-Chloe posted a quote from Solaris.
+Penelope posted a quote from Solaris.
 ```
 
 Expected behavior
 
 ```text
-Create an observation that Chloe shared a quote from Solaris.
+Create an observation that Penelope shared a quote from Solaris.
 Optionally create an uncertain inference that she may like science fiction.
 Do not create a confirmed preference.
 Show separate cards if both records are stored.
@@ -1536,7 +1536,7 @@ Show separate cards if both records are stored.
 Initial state
 
 ```text
-Chloe wore small silver sphere earrings at Sara's birthday.
+Penelope wore small silver sphere earrings at Helena's birthday.
 ```
 
 User message
@@ -1565,8 +1565,8 @@ Her black dress looked amazing.
 Expected behavior
 
 ```text
-The system may store that Matt liked Chloe's black dress.
-It must not store that Chloe likes black dresses.
+The system may store that Odysseus liked Penelope's black dress.
+It must not store that Penelope likes black dresses.
 ```
 
 ### Natural conversation

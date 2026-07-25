@@ -132,8 +132,8 @@ def test_responses_payload_separates_static_dynamic_and_history():
     answer = asyncio.run(
         client.reply(
             [("user", "what accessories should I consider?")],
-            "Matt",
-            "Chloe",
+            "Odysseus",
+            "Penelope",
             "Static profile and safety rules.",
             "Relevant saved context\n- She likes silver accessories.",
         )
@@ -143,7 +143,7 @@ def test_responses_payload_separates_static_dynamic_and_history():
     assert request["instructions"].startswith("Static profile and safety rules.")
     assert "search_memories" in request["instructions"]
     assert request["instructions"].endswith(
-        "The user's name is Matt. The person discussed is Chloe."
+        "The user's name is Odysseus. The person discussed is Penelope."
     )
     assert request["input"][0]["role"] == "developer"
     assert "silver accessories" in request["input"][0]["content"]

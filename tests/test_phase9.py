@@ -19,17 +19,17 @@ def test_editable_prompt_and_retrieved_notes_reach_context(tmp_path):
     )
     initialize_database(settings)
     with session_factory(settings)() as session:
-        user = User(telegram_user_id=42, name="Matt")
+        user = User(telegram_user_id=42, name="Odysseus")
         session.add(user)
         session.commit()
         conversation = Conversation(user_id=user.id)
-        memory = Memory(user_id=user.id, statement="Chloe likes silver accessories")
+        memory = Memory(user_id=user.id, statement="Penelope likes silver accessories")
         session.add_all([conversation, memory])
         session.commit()
         session.add(
             MemoryNote(
                 memory_id=memory.id,
-                text="She wore them at Sara's birthday.",
+                text="She wore them at Helena's birthday.",
                 note_type="evidence",
                 source_message_id="source-1",
             )
@@ -45,7 +45,7 @@ def test_editable_prompt_and_retrieved_notes_reach_context(tmp_path):
             prompt_text=load_prompt(settings),
         )
     assert "Use a calm, playful tone." in context.static_context
-    assert "Sara's birthday" in context.dynamic_context
+    assert "Helena's birthday" in context.dynamic_context
     assert "source-1" in context.dynamic_context
     usage = retrieval_context_usage(results, "Silver accessories would fit her style.")
     assert usage["mentioned_memory_ids"] == [memory.id]

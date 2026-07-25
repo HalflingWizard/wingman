@@ -17,17 +17,17 @@ def test_search_memory_tool_returns_owned_text_and_notes(tmp_path):
     settings = phase7_settings(tmp_path)
     initialize_database(settings)
     with session_factory(settings)() as session:
-        user = User(telegram_user_id=42, name="Matt")
+        user = User(telegram_user_id=42, name="Odysseus")
         session.add(user)
         session.commit()
-        memory = Memory(user_id=user.id, statement="Chloe likes silver accessories")
+        memory = Memory(user_id=user.id, statement="Penelope likes silver accessories")
         session.add(memory)
         session.commit()
         result = MemoryToolExecutor(session, user).execute(
             "search_memories", {"query": "what jewelry does she like"}
         )
     assert result["memories"][0]["memory_id"] == memory.id
-    assert result["memories"][0]["statement"] == "Chloe likes silver accessories"
+    assert result["memories"][0]["statement"] == "Penelope likes silver accessories"
 
 
 def test_model_client_runs_application_controlled_tool_loop():
@@ -70,8 +70,8 @@ def test_model_client_runs_application_controlled_tool_loop():
     answer = asyncio.run(
         client.reply(
             [("user", "What jewelry does she like?")],
-            "Matt",
-            "Chloe",
+            "Odysseus",
+            "Penelope",
             "Static context",
             "Dynamic context",
             tool_executor=execute,
