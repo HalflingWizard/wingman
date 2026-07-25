@@ -47,6 +47,10 @@ Phase 9 separates editable conversation style from application policy. The owner
 
 The dashboard is a shared visual workspace. It uses a small responsive style system, Font Awesome icons with accessible labels, readable memory records, useful status summaries, and diagnostic details. Raw JSON and prompt content remain available in fixed-height, scrollable, copyable inspection panels. The interface stays server-rendered so the local app has no frontend build step.
 
+The Context page separates owner-editable conversation guidance from application-controlled safety and tool rules. It also explains the dynamic context sources without exposing retrieval internals to the model. The Settings page can persist selected runtime values in the local `.env` file. API keys are accepted for local convenience but remain plaintext on disk and masked in the interface.
+
+JSON export and import use versioned user data. Imports preserve record IDs where possible, update existing records, and force ownership fields to the currently configured owner so an export cannot introduce another owner through the web form.
+
 ## Process lifecycle
 
 The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. The dashboard can pause or resume Telegram message processing without stopping the web server. Full independent process control remains future work.

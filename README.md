@@ -18,6 +18,8 @@ Phase 9 adds an editable conversation prompt at `prompts/wingman.md`. Change thi
 
 Phase 10 redesigns the local dashboard with a shared responsive layout, Font Awesome icons, active navigation, summary cards, clearer panels, and direct tool links. Health, memories, planning, retrieval, API calls, conversations, settings, and system pages now share the same visual workspace. Diagnostic JSON remains highlighted, fixed-height, scrollable, and copyable.
 
+Phase 11 adds a Context page for editing `prompts/wingman.md` and explaining how dynamic context is assembled. The Settings page can update local runtime values, including API keys, while keeping secret values masked. The System page can now import a JSON export and uses one pause or resume toggle for the bot. Imported records remain owned by the configured local owner.
+
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 
 Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.
@@ -77,4 +79,4 @@ mypy wingman
 pytest
 ```
 
-Export and backups are available in the system page. JSON import, encrypted secrets, login rate limiting, and retention controls are still planned. See `SECURITY.md` for limitations.
+Export, import, and backups are available in the system page. Encrypted secrets, login rate limiting, and retention controls are still planned. Settings are written to the local plaintext `.env` file, so the dashboard must remain local-only. See `SECURITY.md` for limitations.

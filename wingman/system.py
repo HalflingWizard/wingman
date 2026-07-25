@@ -27,6 +27,104 @@ def _row(record: Any, fields: list[str]) -> dict[str, object]:
     return {field: getattr(record, field) for field in fields}
 
 
+def _parse_datetime(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    return datetime.fromisoformat(str(value))
+
+
+def _restore_row(
+    session: Session, model: type[Any], payload: dict[str, object], fields: list[str]
+) -> Any:
+    identifier = payload.get("id")
+    record = session.get(model, identifier) if identifier else None
+    if record is None:
+        record = model(id=str(identifier)) if identifier else model()
+        session.add(record)
+    for field in fields:
+        if field in payload:
+            value = payload[field]
+            if field.endswith("_at") or field in {"created_at", "updated_at"}:
+                value = _parse_datetime(value)
+            setattr(record, field, value)
+    return record
+
+
+def import_user_data(session: Session, user: User, payload: object) -> None:
+    """Restore an export while keeping all imported records owned by this user."""
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        raise ValueError("Unsupported Wingman export")
+    for item in payload.get("conversations", []):
+        if isinstance(item, dict):
+            _restore_row(
+                session,
+                Conversation,
+                {**item, "user_id": user.id},
+                ["user_id", "created_at"],
+            )
+    session.flush()
+    for item in payload.get("messages", []):
+        if isinstance(item, dict):
+            _restore_row(
+                session,
+                Message,
+                item,
+                ["conversation_id", "sender", "text", "telegram_message_id", "created_at"],
+            )
+    for item in payload.get("memories", []):
+        if isinstance(item, dict):
+            _restore_row(
+                session,
+                Memory,
+                {**item, "user_id": user.id},
+                [
+                    "user_id",
+                    "type",
+                    "statement",
+                    "status",
+                    "confidence",
+                    "importance",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ],
+            )
+    session.flush()
+    for item in payload.get("memory_notes", []):
+        if isinstance(item, dict):
+            _restore_row(
+                session,
+                MemoryNote,
+                item,
+                ["memory_id", "text", "note_type", "source_message_id", "confidence", "created_at"],
+            )
+    collections = (
+        ("places", Place, ["name", "place_type", "address", "city", "description", "status"]),
+        ("ideas", SavedIdea, ["title", "reason", "place_id", "status", "used"]),
+        ("events", Event, ["title", "event_type", "start_at", "end_at", "status", "description"]),
+        ("reminders", Reminder, ["title", "scheduled_at", "timezone", "status", "delivery_status"]),
+    )
+    for key, model, fields in collections:
+        for item in payload.get(key, []):
+            if isinstance(item, dict):
+                _restore_row(session, model, {**item, "user_id": user.id}, ["user_id", *fields])
+    for item in payload.get("summaries", []):
+        if isinstance(item, dict):
+            _restore_row(
+                session,
+                ConversationSummary,
+                item,
+                [
+                    "conversation_id",
+                    "summary_text",
+                    "summarized_through_message_id",
+                    "estimated_tokens",
+                    "updated_at",
+                ],
+            )
+    session.commit()
+
+
 def export_user_data(session: Session, user: User) -> dict[str, object]:
     conversations = list(session.query(Conversation).filter_by(user_id=user.id))
     conversation_ids = {item.id for item in conversations}

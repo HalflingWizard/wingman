@@ -1,9 +1,21 @@
 """Application settings."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+EDITABLE_SETTINGS = {
+    "telegram_bot_token": "WINGMAN_TELEGRAM_BOT_TOKEN",
+    "telegram_owner_id": "WINGMAN_TELEGRAM_OWNER_ID",
+    "openai_api_key": "WINGMAN_OPENAI_API_KEY",
+    "openai_main_model": "WINGMAN_OPENAI_MAIN_MODEL",
+    "openai_summary_model": "WINGMAN_OPENAI_SUMMARY_MODEL",
+    "user_name": "WINGMAN_USER_NAME",
+    "primary_person_name": "WINGMAN_PRIMARY_PERSON_NAME",
+    "timezone": "WINGMAN_TIMEZONE",
+}
 
 
 class Settings(BaseSettings):
@@ -37,3 +49,29 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def save_runtime_settings(settings: Settings, values: dict[str, str]) -> None:
+    """Apply dashboard settings and persist them in the local env file."""
+    env_path = Settings.model_config.get("env_file", ".env")
+    path = Path(str(env_path))
+    existing: dict[str, str] = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                existing[key.strip()] = value
+    for field, env_key in EDITABLE_SETTINGS.items():
+        value = values.get(field, "")
+        if field in {"telegram_bot_token", "openai_api_key"} and not value:
+            value = str(getattr(settings, field))
+        if field == "telegram_owner_id" and value:
+            setattr(settings, field, int(value))
+        elif value:
+            setattr(settings, field, value)
+        existing[env_key] = value
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in existing.items()) + "\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o600)

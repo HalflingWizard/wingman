@@ -16,3 +16,9 @@ def load_prompt(settings: Settings) -> str:
     except OSError:
         prompt = ""
     return prompt[:12000] or DEFAULT_PROMPT
+
+
+def save_prompt(settings: Settings, prompt: str) -> None:
+    path = Path(settings.prompt_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(prompt.strip()[:12000] + "\n", encoding="utf-8")

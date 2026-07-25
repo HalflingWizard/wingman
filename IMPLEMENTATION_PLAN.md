@@ -277,9 +277,17 @@ Acceptance requirements
 
 ### Phase 11
 
-Status planned
+Status complete
 
-Reliability, evaluation, and release hardening
+Context control, settings, and data portability
+
+Delivered in Phase 11
+
+- Added a Context page for editing the owner guidance file and explaining static and dynamic context.
+- Added local settings editing for model, identity, timezone, Telegram, and OpenAI values. Secret fields remain masked and blank values preserve existing secrets.
+- Added JSON import that restores exported records under the current owner.
+- Changed the system bot control to one toggle button for pause and resume.
+- Kept planning records out of the model tool list until their save policy and tool behavior are designed.
 
 - Add conversation scenario fixtures for the target natural dialogues.
 - Add mocked Responses API tool-call tests without live API credentials.

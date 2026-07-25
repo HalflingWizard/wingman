@@ -6,18 +6,20 @@
 import json
 from datetime import UTC, datetime
 from html import escape
+from typing import Annotated
 from uuid import uuid4
 
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from wingman import __version__
-from wingman.config import Settings, get_settings
+from wingman.config import Settings, get_settings, save_runtime_settings
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, set_paused
 from wingman.models import AgentRun, Conversation, ConversationSummary, User
+from wingman.prompting import load_prompt, save_prompt
 from wingman.services import (
     add_memory_note,
     confirm_memory,
@@ -37,7 +39,7 @@ from wingman.services import (
     update_memory,
     update_memory_note,
 )
-from wingman.system import backup_database, export_user_data, safe_update
+from wingman.system import backup_database, export_user_data, import_user_data, safe_update
 
 
 def code_panel(label: str, content: str, max_height: int = 420) -> str:
@@ -55,6 +57,7 @@ NAV_ITEMS = (
     ("dashboard", "/", "gauge-high", "Dashboard"),
     ("health", "/health", "heart-pulse", "Health"),
     ("memories", "/memories", "brain", "Memories"),
+    ("context", "/context", "layer-group", "Context"),
     ("conversations", "/conversations", "comments", "Conversations"),
     ("planning", "/planning", "calendar-days", "Planning"),
     ("api-calls", "/api-calls", "code", "API calls"),
@@ -209,6 +212,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "</div></section>"
         )
         return page_shell("Dashboard", body, "dashboard")
+
+    @app.get("/context", response_class=HTMLResponse)
+    def context_page() -> str:
+        prompt = escape(load_prompt(active_settings))
+        body = (
+            "<header class='page-header'><div><p class='eyebrow'>Context design</p><h1>Context</h1>"
+            "<p class='muted'>Control the editable conversation guidance and understand what changes each turn.</p></div></header>"
+            "<section class='panel'><div class='panel-header'><div><h2>Static context</h2>"
+            "<p class='muted'>This guidance is included on every model request. Application safety and tool rules remain protected in code.</p></div>"
+            "<i class='fa-solid fa-file-pen'></i></div>"
+            "<form method='post' action='/context'><textarea name='prompt' rows='18' maxlength='12000' style='width:100%' required>"
+            f"{prompt}</textarea><p><button><i class='fa-solid fa-floppy-disk'></i> Save static context</button></p></form></section>"
+            "<section class='panel'><div class='panel-header'><div><h2>Dynamic context</h2>"
+            "<p class='muted'>This is assembled for each message based on the current conversation.</p></div>"
+            "<i class='fa-solid fa-arrows-rotate'></i></div>"
+            "<ul><li>Relevant saved memories and their notes</li>"
+            "<li>Recent conversation messages</li><li>Conversation summaries when available</li>"
+            "<li>Open memory proposals awaiting your answer</li>"
+            "<li>Planning records when they are relevant to the conversation</li></ul>"
+            "<p class='muted'>The system keeps this context within the configured token budget and does not send this dashboard explanation to the model.</p></section>"
+        )
+        return page_shell("Context", body, "context")
+
+    @app.post("/context", response_class=HTMLResponse)
+    def update_context(prompt: str = Form(...)) -> str:
+        save_prompt(active_settings, prompt)
+        return context_page()
 
     @app.get("/memories", response_class=HTMLResponse)
     def memories() -> str:
@@ -442,27 +472,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Configuration</p><h1>Settings</h1>"
             "<p class='muted'>Runtime values are read from the environment. Secrets stay masked here.</p></div></header>"
-            "<section class='panel stack'>"
-            + f"<p>Telegram token {mask(active_settings.telegram_bot_token)}</p>"
-            + f"<p>OpenAI key {mask(active_settings.openai_api_key)}</p>"
-            + f"<p>Owner ID "
-            f"{escape(str(active_settings.telegram_owner_id or 'not configured'))}</p>"
-            + f"<p>Main model {escape(active_settings.openai_main_model)}</p>"
-            + f"<p>Timezone {escape(active_settings.timezone)}</p>"
-            + "<p>This dashboard is local-only. Secrets remain masked and are configured through the environment.</p></section>"
+            "<section class='panel'><h2>Connection and identity</h2>"
+            "<form method='post' action='/settings' class='stack'>"
+            f"<label>Telegram bot token <input type='password' name='telegram_bot_token' placeholder='{mask(active_settings.telegram_bot_token)}'></label>"
+            f"<label>OpenAI API key <input type='password' name='openai_api_key' placeholder='{mask(active_settings.openai_api_key)}'></label>"
+            f"<label>Telegram owner ID <input name='telegram_owner_id' value='{escape(str(active_settings.telegram_owner_id or ''))}'></label>"
+            f"<label>Your name <input name='user_name' value='{escape(active_settings.user_name, quote=True)}'></label>"
+            f"<label>Primary person's name <input name='primary_person_name' value='{escape(active_settings.primary_person_name, quote=True)}'></label>"
+            "<h2>Models and time</h2>"
+            f"<label>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
+            f"<label>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
+            f"<label>Timezone <input name='timezone' value='{escape(active_settings.timezone, quote=True)}'></label>"
+            "<p><button><i class='fa-solid fa-floppy-disk'></i> Save settings</button></p></form></section>"
+            "<section class='panel'><p>This dashboard is local-only. Blank secret fields keep the current values. Settings are stored in the local .env file, which is plaintext and should not be exposed.</p></section>"
         )
         return page_shell("Settings", body, "settings")
 
+    @app.post("/settings", response_class=HTMLResponse)
+    def update_settings(
+        telegram_bot_token: str = Form(""),
+        telegram_owner_id: str = Form(""),
+        openai_api_key: str = Form(""),
+        openai_main_model: str = Form(""),
+        openai_summary_model: str = Form(""),
+        user_name: str = Form(""),
+        primary_person_name: str = Form(""),
+        timezone: str = Form(""),
+    ) -> str:
+        try:
+            save_runtime_settings(
+                active_settings,
+                {
+                    "telegram_bot_token": telegram_bot_token,
+                    "telegram_owner_id": telegram_owner_id,
+                    "openai_api_key": openai_api_key,
+                    "openai_main_model": openai_main_model,
+                    "openai_summary_model": openai_summary_model,
+                    "user_name": user_name,
+                    "primary_person_name": primary_person_name,
+                    "timezone": timezone,
+                },
+            )
+        except (ValueError, OSError) as exc:
+            return page_shell(
+                "Settings",
+                f"<section class='panel'><p>{escape(str(exc))}</p></section>",
+                "settings",
+            )
+        return settings_page()
+
     @app.get("/system", response_class=HTMLResponse)
     def system_page() -> str:
+        paused = is_paused(active_settings)
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Controls</p><h1>System</h1>"
             "<p class='muted'>Manage the bot lifecycle and local data safely.</p></div></header>"
             "<section class='panel stack'>"
-            + f"<p>Telegram bot {'paused' if is_paused(active_settings) else 'running'}</p>"
-            + "<form method='post' action='/system/bot/pause'><button>Pause bot</button></form>"
-            + "<form method='post' action='/system/bot/resume'><button>Resume bot</button></form>"
-            + "<a href='/system/export'>Download JSON export</a>"
+            + f"<p><span class='badge'><span class='status-dot'></span>Telegram bot {'paused' if paused else 'running'}</span></p>"
+            + f"<form method='post' action='/system/bot/{'resume' if paused else 'pause'}'><button>"
+            + f"<i class='fa-solid fa-{'play' if paused else 'pause'}'></i> {'Resume bot' if paused else 'Pause bot'}</button></form>"
+            + "<p><a class='button button-secondary' href='/system/export'><i class='fa-solid fa-download'></i> Download JSON export</a></p>"
+            + "<form method='post' action='/system/import' enctype='multipart/form-data'><label>Import JSON export <input type='file' name='export_file' accept='.json,application/json' required></label> <button class='button-secondary'><i class='fa-solid fa-upload'></i> Import data</button></form>"
             + "<form method='post' action='/system/backup'><button>Backup database</button></form>"
             + "<form method='post' action='/system/update'><button><i class='fa-solid fa-rotate'></i> Safe Git update</button></form></section>"
         )
@@ -487,6 +557,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "System",
             f"<section class='panel'><p><i class='fa-solid fa-circle-check'></i> Backup created at {escape(str(path))}</p></section>",
             "system",
+        )
+
+    @app.post("/system/import", response_class=HTMLResponse)
+    def import_json(export_file: Annotated[UploadFile, File(...)]) -> str:
+        try:
+            payload = json.loads(export_file.file.read().decode("utf-8"))
+            with session_factory(active_settings)() as session:
+                user = web_user(session)
+                import_user_data(session, user, payload)
+            message = "Import completed"
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            message = f"Import failed {exc}"
+        return page_shell(
+            "System", f"<section class='panel'><p>{escape(message)}</p></section>", "system"
         )
 
     @app.post("/system/update", response_class=HTMLResponse)
