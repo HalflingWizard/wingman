@@ -129,6 +129,15 @@ class ModelClient:
         self.last_tool_trace: list[dict[str, Any]] = []
         prompt = (
             f"{static_context} "
+            "Memory tool guidance. Use search_memories when the current context may be "
+            "missing a relevant saved detail or when checking for a duplicate. Use "
+            "create_memory for a clear durable preference or fact, including a direct "
+            "reported preference such as she told me she likes tomatoes. Do not create "
+            "memories for greetings, generic brainstorming, temporary plans, or minor "
+            "conversation details. Use observed or inferred for a new unconfirmed detail. "
+            "Use add_memory_note when new evidence supports an existing memory. Use "
+            "confirm_memory only after the user confirms it. Keep the final reply natural "
+            "and never mention the internal tool call. "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
             f"{person_name or 'someone important to the user'}."
         )

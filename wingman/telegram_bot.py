@@ -330,6 +330,48 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             add_message(session, conversation, "assistant", answer)
         await message.answer(answer)
 
+        published_memory_ids: set[str] = set()
+        for trace in model_client.last_tool_trace:
+            if trace.get("name") != "create_memory":
+                continue
+            output = trace.get("output", {})
+            if not isinstance(output, dict) or not output.get("ok"):
+                continue
+            result = output.get("result", {})
+            if not isinstance(result, dict):
+                continue
+            memory_id = result.get("memory_id")
+            if not isinstance(memory_id, str) or memory_id in published_memory_ids:
+                continue
+            published_memory_ids.add(memory_id)
+            if model_client is not None:
+                try:
+                    with sessions() as session:
+                        user = get_or_create_user(session, owner_id)
+                        memory = get_owned_memory(session, user, memory_id)
+                        statement = memory.statement if memory is not None else ""
+                    if statement:
+                        vector = await model_client.embed(
+                            statement, settings.openai_embedding_model
+                        )
+                        with sessions() as session:
+                            user = get_or_create_user(session, owner_id)
+                            set_memory_embedding(session, user, memory_id, vector)
+                except Exception:
+                    pass
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id)
+                memory = get_owned_memory(session, user, memory_id)
+                if memory is None or memory.status == "deleted":
+                    continue
+                card_text, keyboard = memory_card(memory)
+            card = await message.answer(card_text, reply_markup=keyboard)
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id)
+                memory = get_owned_memory(session, user, memory_id)
+                if memory is not None:
+                    save_telegram_card(session, memory, message.chat.id, card.message_id)
+
     dispatcher.include_router(router)
     return dispatcher
 

@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from html import escape
+from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -34,6 +35,17 @@ from wingman.services import (
     update_memory_note,
 )
 from wingman.system import backup_database, export_user_data, safe_update
+
+
+def code_panel(label: str, content: str, max_height: int = 420) -> str:
+    panel_id = f"code-{uuid4().hex}"
+    return (
+        "<section class='code-panel'>"
+        f"<div class='code-toolbar'><strong>{escape(label)}</strong>"
+        f"<button type='button' onclick=\"copyCode('{panel_id}', this)\">Copy</button></div>"
+        f"<pre id='{panel_id}' class='code-block' style='max-height:{max_height}px'>"
+        f"{escape(content)}</pre></section>"
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -84,6 +96,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def navigation() -> str:
         return (
+            "<style>"
+            ".code-panel{border:1px solid #d0d7de;border-radius:8px;margin:1rem 0;overflow:hidden}"
+            ".code-toolbar{display:flex;justify-content:space-between;align-items:center;"
+            "padding:.5rem .75rem;background:#f6f8fa}"
+            ".code-toolbar button{cursor:pointer;border:1px solid #afb8c1;border-radius:5px;"
+            "background:white;padding:.25rem .6rem}"
+            ".code-block{margin:0;overflow:auto;padding:1rem;background:#0d1117;color:#c9d1d9;"
+            "white-space:pre-wrap}"
+            ".json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}"
+            ".json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
+            "</style>"
+            "<script>"
+            "function copyCode(id,button){const text=document.getElementById(id).textContent;"
+            "navigator.clipboard.writeText(text).then(()=>{const old=button.textContent;"
+            "button.textContent='Copied';setTimeout(()=>button.textContent=old,1200);});}"
+            "function escapeCode(text){return text.replaceAll('&','&amp;').replaceAll('<','&lt;')"
+            ".replaceAll('>','&gt;').replaceAll(String.fromCharCode(34),'&quot;');}"
+            "function highlightJson(pre){const raw=pre.textContent;let html='';let last=0;"
+            'const pattern=/("(?:\\\\.|[^"\\\\])*")(\\s*:)?|\\b(true|false)\\b|\\bnull\\b|'
+            "-?\\b\\d+(?:\\.\\d+)?\\b/g;raw.replace(pattern,(match,string,colon,boolean,index)=>{"
+            "html+=escapeCode(raw.slice(last,index));let cls=colon?'json-key':"
+            "boolean?'json-boolean':match==='null'?'json-null':"
+            "string?'json-string':'json-number';html+=`<span class=\"${cls}\">${"
+            "escapeCode(match)}</span>`;last=index+match.length;});html+=escapeCode(raw.slice(last));"
+            "pre.innerHTML=html;}document.addEventListener('DOMContentLoaded',()=>document."
+            "querySelectorAll('.code-block').forEach(highlightJson));"
+            "</script>"
             "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
             "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
             "<a href='/planning'>Planning</a> | <a href='/api-calls'>API calls</a> | "
@@ -252,12 +291,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rows.append(
                 "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
                 f"<h2>Query</h2><p>{escape(log.query_text)}</p>"
-                f"<h3>Query details</h3><pre style='max-height:260px;overflow:auto;"
-                f"background:#f6f8fa;padding:1rem;white-space:pre-wrap'>"
-                f"{escape(query_json)}</pre>"
-                f"<h3>Ranked candidates</h3><pre style='max-height:420px;overflow:auto;"
-                f"background:#f6f8fa;padding:1rem;white-space:pre-wrap'>"
-                f"{escape(candidate_json)}</pre></article>"
+                f"<h3>Query details</h3>{code_panel('JSON query', query_json, 260)}"
+                f"<h3>Ranked candidates</h3>"
+                f"{code_panel('JSON candidates', candidate_json)}</article>"
             )
         return (
             f"<html><body>{navigation()}<h1>Retrieval inspector</h1><ul>{rows}</ul></body></html>"
@@ -467,12 +503,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"<h2>{escape(run.model_name)} {escape(run.status)}</h2>"
                 f"<p>Latency {run.latency_ms} ms. Input tokens {run.input_tokens}. "
                 f"Output tokens {run.output_tokens}.</p>"
-                "<h3>Full request</h3>"
-                f"<pre style='max-height:420px;overflow:auto;background:#f6f8fa;"
-                f"padding:1rem;white-space:pre-wrap'>{escape(formatted_request)}</pre>"
-                "<h3>Full response</h3>"
-                f"<pre style='max-height:420px;overflow:auto;background:#f6f8fa;"
-                f"padding:1rem;white-space:pre-wrap'>{escape(formatted_response)}</pre>"
+                f"<h3>Full request</h3>{code_panel('JSON request', formatted_request)}"
+                f"<h3>Full response</h3>{code_panel('JSON response', formatted_response)}"
                 f"<p>Error {escape(run.error or '')}</p></article>"
             )
         return (

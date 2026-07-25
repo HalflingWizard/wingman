@@ -140,8 +140,10 @@ def test_responses_payload_separates_static_dynamic_and_history():
     )
     assert answer.startswith("Use the silver")
     request = calls[0]
-    assert request["instructions"] == (
-        "Static profile and safety rules. The user's name is Matt. The person discussed is Chloe."
+    assert request["instructions"].startswith("Static profile and safety rules.")
+    assert "search_memories" in request["instructions"]
+    assert request["instructions"].endswith(
+        "The user's name is Matt. The person discussed is Chloe."
     )
     assert request["input"][0]["role"] == "developer"
     assert "silver accessories" in request["input"][0]["content"]
