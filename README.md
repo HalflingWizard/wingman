@@ -12,6 +12,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Keep recent conversation history and rolling summaries
 - Suggest uncertain memories before saving them
 - Plan places, ideas, events, and one-time reminders
+- Search and save planning records conversationally when the owner clearly asks
 - Send due reminders through Telegram
 - Use the owner's name, primary person's name, timezone, and current time naturally
 - Keep facts, observations, and inferences separate

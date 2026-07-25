@@ -142,6 +142,8 @@ Delivered in Phase 2.2
 
 Dynamic planning tools and conversational capture
 
+Status complete
+
 - Add application-controlled tools for searching, creating, updating, and annotating places, saved ideas, events, and reminders.
 - Search existing planning records before creating a duplicate.
 - Allow partial records. Unknown address, date, time, city, or other fields remain explicitly unknown instead of blocking useful capture.
@@ -151,6 +153,15 @@ Dynamic planning tools and conversational capture
 - Use safe confirmation thresholds for reminders, dates, and externally meaningful commitments.
 - Include relevant planning records in dynamic context without turning every conversation into a planning workflow.
 - Add tools for updating and adding notes to existing places, ideas, events, and reminders.
+
+Delivered in Phase 2.3
+
+- Added planning search, place creation, saved idea creation, event creation, and reminder creation tools.
+- Added duplicate checks before creating planning records.
+- Allowed places to be saved with unknown address and city fields.
+- Added application validation for ownership, dates, times, linked places, linked events, and audit records.
+- Added planning tool schemas to the Responses API request.
+- Updated memory guidance so explicit save requests create memories directly and several valid memory actions can happen in one turn.
 
 ### Phase 2.4
 

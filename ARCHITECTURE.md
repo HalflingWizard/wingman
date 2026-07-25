@@ -38,7 +38,7 @@ Uncertain personal observations can become pending proposals. The owner can acce
 
 Places, saved ideas, events, and one-time reminders use relational tables. Upcoming planning records can contribute to dynamic context. A small reminder worker sends due reminders through Telegram and records delivery state.
 
-The model currently does not create places or events directly. Planning changes remain explicit application or dashboard actions until a safe conversational planning tool policy is designed.
+The model can use validated planning tools to search and create places, saved ideas, events, and reminders. Planning tools check ownership, reject invalid links and dates, avoid exact duplicates, and allow places to be saved before an address or city is known. More complex planning updates remain explicit dashboard actions until their conversational policy is designed.
 
 ## Dashboard
 

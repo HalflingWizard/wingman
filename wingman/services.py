@@ -294,6 +294,14 @@ def list_places(session: Session, user: User, include_deleted: bool = False) -> 
     return list(session.scalars(query))
 
 
+def find_place_by_name(session: Session, user: User, name: str) -> Place | None:
+    normalized = name.strip().casefold()
+    return next(
+        (place for place in list_places(session, user) if place.name.casefold() == normalized),
+        None,
+    )
+
+
 def update_place(session: Session, user: User, place_id: str, **fields: Any) -> Place:
     place = session.get(Place, place_id)
     if place is None or place.user_id != user.id:
@@ -346,6 +354,14 @@ def list_saved_ideas(session: Session, user: User) -> list[SavedIdea]:
     )
 
 
+def find_saved_idea_by_title(session: Session, user: User, title: str) -> SavedIdea | None:
+    normalized = title.strip().casefold()
+    return next(
+        (idea for idea in list_saved_ideas(session, user) if idea.title.casefold() == normalized),
+        None,
+    )
+
+
 def create_event(
     session: Session,
     user: User,
@@ -382,6 +398,18 @@ def list_events(session: Session, user: User, upcoming_only: bool = False) -> li
     return list(session.scalars(query))
 
 
+def find_event(session: Session, user: User, title: str, start_at: datetime) -> Event | None:
+    normalized = title.strip().casefold()
+    return next(
+        (
+            event
+            for event in list_events(session, user)
+            if event.title.casefold() == normalized and _as_utc(event.start_at) == _as_utc(start_at)
+        ),
+        None,
+    )
+
+
 def create_reminder(
     session: Session,
     user: User,
@@ -412,6 +440,21 @@ def list_reminders(session: Session, user: User, active_only: bool = False) -> l
     if active_only:
         query = query.where(Reminder.status == "scheduled")
     return list(session.scalars(query))
+
+
+def find_reminder(
+    session: Session, user: User, title: str, scheduled_at: datetime
+) -> Reminder | None:
+    normalized = title.strip().casefold()
+    return next(
+        (
+            reminder
+            for reminder in list_reminders(session, user)
+            if reminder.title.casefold() == normalized
+            and _as_utc(reminder.scheduled_at) == _as_utc(scheduled_at)
+        ),
+        None,
+    )
 
 
 def mark_reminder_delivered(session: Session, reminder_id: str) -> Reminder:

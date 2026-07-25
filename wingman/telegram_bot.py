@@ -25,7 +25,7 @@ from wingman.context_builder import build_context
 from wingman.database import session_factory
 from wingman.inbound import InboundAttachment, InboundMessage
 from wingman.lifecycle import is_paused
-from wingman.model_client import MEMORY_TOOLS, ModelClient
+from wingman.model_client import AVAILABLE_TOOLS, ModelClient
 from wingman.models import Memory, now_utc
 from wingman.prompting import load_prompt
 from wingman.retrieval import (
@@ -376,7 +376,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 "context_added": built_context.dynamic_context,
                 "recent_messages": history,
                 "estimated_context_tokens": built_context.estimated_tokens,
-                "tools_available": [tool["name"] for tool in MEMORY_TOOLS],
+                "tools_available": [tool["name"] for tool in AVAILABLE_TOOLS],
             },
             sort_keys=True,
         )

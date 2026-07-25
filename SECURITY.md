@@ -26,7 +26,7 @@ JSON import accepts versioned application exports and forces imported records to
 
 The editable prompt controls style only. Application code remains responsible for authorization, memory ownership, safety guidance, tool schemas, validation, transactions, and audit records.
 
-Memory search is read-only. Memory writes are validated and audited. Uncertain personal observations use a confirmation proposal flow. The model does not currently have direct tools for creating places or events.
+Memory search and planning search are read-only. Memory and planning writes are validated and audited. Uncertain personal observations use a confirmation proposal flow, while explicit save requests can create several valid memories in one turn. Planning tools check ownership, linked records, duplicate names and dates, and required event times.
 
 OpenAI receives the conversation content required for replies and embeddings according to the configured API use. Do not use Wingman for medical, legal, financial, or other high-stakes decisions.
 

@@ -1,5 +1,8 @@
 """OpenAI Responses API adapter."""
 
+# Tool schemas are intentionally kept inline for API snapshot readability.
+# ruff: noqa: E501
+
 import json
 from collections.abc import Callable
 from typing import Any, cast
@@ -31,7 +34,8 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         "name": "propose_memory",
         "description": (
             "Ask the owner whether to save an uncertain personal observation or preference. "
-            "Use this before saving a detail such as Odysseus's opinion about someone's clothing."
+            "Use this only when the owner has not explicitly asked to save it. Do not use it "
+            "for a direct request to remember or save a detail."
         ),
         "parameters": {
             "type": "object",
@@ -56,7 +60,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "create_memory",
-        "description": "Create a saved memory after the user clearly states a durable detail.",
+        "description": "Create a saved memory after the user clearly states a durable detail or explicitly asks to remember it.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -149,6 +153,97 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+PLANNING_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": "search_planning",
+        "description": "Search the owner's places, ideas, events, and reminders before creating duplicates.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "minLength": 1, "maxLength": 500},
+                "top_k": {"type": "integer", "minimum": 1, "maximum": 10},
+            },
+            "required": ["query", "top_k"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "create_place",
+        "description": "Save a useful place. Address and city may be unknown and can be added later.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "minLength": 1, "maxLength": 200},
+                "address": {"type": "string", "maxLength": 500},
+                "city": {"type": "string", "maxLength": 120},
+                "description": {"type": "string", "maxLength": 4000},
+                "place_type": {"type": "string", "maxLength": 40},
+                "atmosphere_tags": {"type": "string", "maxLength": 500},
+            },
+            "required": ["name", "address", "city", "description", "place_type", "atmosphere_tags"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "create_saved_idea",
+        "description": "Save a useful date or relationship idea after clear owner intent.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                "reason": {"type": "string", "maxLength": 4000},
+                "place_id": {"type": ["string", "null"]},
+            },
+            "required": ["title", "reason", "place_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "create_event",
+        "description": "Create an event only when the owner provides a definite date and time.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                "start_at": {"type": "string", "minLength": 1, "maxLength": 80},
+                "event_type": {"type": "string", "maxLength": 40},
+                "timezone": {"type": "string", "maxLength": 80},
+                "description": {"type": "string", "maxLength": 4000},
+                "place_id": {"type": ["string", "null"]},
+            },
+            "required": ["title", "start_at", "event_type", "timezone", "description", "place_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "create_reminder",
+        "description": "Create a reminder only when the owner provides a definite date and time.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                "scheduled_at": {"type": "string", "minLength": 1, "maxLength": 80},
+                "timezone": {"type": "string", "maxLength": 80},
+                "event_id": {"type": ["string", "null"]},
+            },
+            "required": ["title", "scheduled_at", "timezone", "event_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+]
+
+AVAILABLE_TOOLS = MEMORY_TOOLS + PLANNING_TOOLS
+
 
 class ModelClient:
     def __init__(self, settings: Settings) -> None:
@@ -180,6 +275,12 @@ class ModelClient:
             "conversation details. For Odysseus's own subjective opinion or an observation he "
             "has not asked to save, use propose_memory first. Use observed or inferred for "
             "a new unconfirmed detail. "
+            "When the owner explicitly says remember, save, add, or keep a detail, use "
+            "create_memory directly instead of propose_memory. If one message contains "
+            "several explicit save requests, create each valid memory. "
+            "Use planning tools when the owner clearly wants a place, idea, event, or reminder "
+            "saved. Search planning records before creating duplicates. Places may have unknown "
+            "addresses or cities. Do not invent missing dates or times for events and reminders. "
             "When one message contains several distinct durable details, handle each safe "
             "detail and use multiple tool calls when appropriate. Do not stop after the "
             "first valid memory action. "
@@ -215,7 +316,7 @@ class ModelClient:
             "include": ["reasoning.encrypted_content"],
         }
         if tool_executor is not None:
-            request["tools"] = MEMORY_TOOLS
+            request["tools"] = AVAILABLE_TOOLS
             request["tool_choice"] = "auto"
             request["parallel_tool_calls"] = True
         self.last_request_snapshot = request
