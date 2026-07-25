@@ -39,6 +39,6 @@ The initial database has users, conversations, and messages. IDs are UUID string
 
 ## Security boundary
 
-The web server is local-only by default. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables and are redacted from health and settings pages. The production web app uses a local password hash, session cookies, and CSRF protection. Encrypted secret storage and login rate limiting remain future work.
+The web server is local-only by default and the dashboard is intentionally unauthenticated. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables and are redacted from health and settings pages. Encrypted secret storage remains future work.
 
 Deleted Telegram cards use a two-step lifecycle. The callback immediately soft-deletes the memory and edits the card to show the deleted state. Before the next authorized text message is processed, the bot deletes those tombstones and marks their card records as cleaned. Telegram deletion failures leave the tombstone pending for a later retry.

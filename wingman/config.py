@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     user_name: str = ""
     primary_person_name: str = ""
     timezone: str = "UTC"
-    auth_file: str = ".wingman_auth.json"
     data_dir: str = "./data"
     log_dir: str = "./logs"
 

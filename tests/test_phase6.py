@@ -1,6 +1,5 @@
 from fastapi.testclient import TestClient
 
-from wingman.auth import AuthStore
 from wingman.config import Settings
 from wingman.database import initialize_database, session_factory
 from wingman.lifecycle import is_paused, set_paused
@@ -19,12 +18,7 @@ def phase6_settings(tmp_path):
     )
 
 
-def test_password_hashing_and_database_export_backup(tmp_path):
-    auth = AuthStore(str(tmp_path / "auth.json"))
-    auth.set_password("a-long-test-password")
-    assert auth.configured
-    assert auth.verify("a-long-test-password")
-    assert not auth.verify("wrong-password")
+def test_database_export_and_backup(tmp_path):
     settings = phase6_settings(tmp_path)
     initialize_database(settings)
     with session_factory(settings)() as session:

@@ -92,20 +92,18 @@ Delivered in Phase 5
 
 Status core complete, with documented limitations
 
-- Added first-run local password setup with PBKDF2 password hashing.
-- Added authenticated web sessions with secure cookie flags and CSRF checks on POST routes.
-- Added settings and system pages with navigation from every dashboard page.
+- Added local settings and system pages with navigation from every dashboard page.
 - Added bot pause and resume controls. Paused mode keeps the bot connected and sends a short status reply.
 - Added JSON export without embeddings or secrets.
 - Added SQLite database backups with restrictive file permissions.
 - Added safe fast-forward Git updates that refuse a dirty worktree.
 - Added CLI PID status, stop, restart, and update support.
 - Added retrieval explanations with query details, memory text, embedding availability, and score components.
-- Added Phase 6 tests for authentication storage, export, backups, and retrieval inspection.
+- Added Phase 6 tests for export, backups, lifecycle state, and retrieval inspection.
 
 Remaining limitations
 
-- API keys and Telegram tokens remain environment-backed. The settings page masks them but does not change them.
+- API keys and Telegram tokens remain environment-backed. The settings page masks them and does not change them.
 - JSON import, login rate limiting, log viewing, and independent web and bot process controls are not complete.
 - The dashboard update action does not restart the running process after an update.
 
@@ -113,9 +111,9 @@ Remaining limitations
 
 - SQLite is the default for local development and tests.
 - PostgreSQL support will be added when the domain schema is stable enough to justify migrations.
-- Phase 1 keeps secrets in environment variables. Phase 6 adds password setup and session protection, but encrypted API and Telegram secret storage remains future work.
+- Secrets remain in environment variables. Encrypted API and Telegram secret storage remains future work.
 - The web server binds to `127.0.0.1` by default.
 - The bot does not start without both a token and an allowed Telegram user ID.
 - OpenAI failures produce a short Telegram error and never create an invented assistant response.
-- Injected test applications are unauthenticated. The production CLI application uses password authentication and CSRF protection.
+- The web dashboard is intentionally local-only and unauthenticated. Do not expose it beyond the trusted machine.
 - Embedding failures fall back to lexical retrieval. No live OpenAI calls are made by the test suite.

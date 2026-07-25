@@ -1,19 +1,15 @@
 """FastAPI application."""
 
-import hmac
 import json
 from datetime import UTC, datetime
 from html import escape
-from typing import Any, cast
-from urllib.parse import parse_qs
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from wingman import __version__
-from wingman.auth import AuthStore, new_session
 from wingman.config import Settings, get_settings
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, set_paused
@@ -43,98 +39,6 @@ from wingman.system import backup_database, export_user_data, safe_update
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title="Wingman", version=__version__)
-    auth_enabled = settings is None
-    auth_store = AuthStore(active_settings.auth_file)
-    sessions: dict[str, str] = {}
-    app.state.sessions = sessions
-
-    @app.middleware("http")
-    async def authentication(request: Request, call_next: Any) -> Response:
-        if not auth_enabled:
-            return cast(Response, await call_next(request))
-        public = {"/login", "/setup", "/health"}
-        session_id = request.cookies.get("wingman_session")
-        csrf_token = sessions.get(session_id or "")
-        if request.url.path not in public and csrf_token is None:
-            target = "/setup" if not auth_store.configured else "/login"
-            return RedirectResponse(target, status_code=303)
-        if request.method == "POST" and request.url.path not in {"/login", "/setup"}:
-            body = await request.body()
-            request._body = body
-            submitted = parse_qs(body.decode()).get("csrf_token", [""])[0]
-            if csrf_token is None or not hmac.compare_digest(submitted, csrf_token):
-                return Response("CSRF validation failed", status_code=403)
-        response = await call_next(request)
-        if "text/html" in response.headers.get("content-type", ""):
-            body = b"".join([chunk async for chunk in response.body_iterator])
-            if csrf_token:
-                marker = b"<form method='post'"
-                hidden = (
-                    b"<input type='hidden' name='csrf_token' value='" + csrf_token.encode() + b"'>"
-                )
-                body = body.replace(marker, marker + hidden)
-            return Response(
-                content=body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type="text/html",
-            )
-        return cast(Response, response)
-
-    @app.get("/setup", response_class=HTMLResponse)
-    def setup_page() -> str:
-        if auth_store.configured:
-            return "<html><body><a href='/login'>Log in</a></body></html>"
-        return (
-            "<html><body><h1>Wingman first-run setup</h1>"
-            "<form method='post'><input type='password' name='password' "
-            "placeholder='Administrator password' required><button>Create password</button></form>"
-            "<p>Use at least 12 characters. Keep this local application private.</p></body></html>"
-        )
-
-    @app.post("/setup", response_class=HTMLResponse)
-    def setup(password: str = Form(...)) -> Response:
-        if auth_store.configured:
-            return RedirectResponse("/login", status_code=303)
-        try:
-            auth_store.set_password(password)
-        except ValueError as exc:
-            return HTMLResponse(f"<p>{escape(str(exc))}</p><a href='/setup'>Try again</a>", 400)
-        return RedirectResponse("/login", status_code=303)
-
-    @app.get("/login", response_class=HTMLResponse)
-    def login_page() -> str:
-        return (
-            "<html><body><h1>Wingman login</h1>"
-            "<form method='post'><input type='password' name='password' required>"
-            "<button>Log in</button></form></body></html>"
-        )
-
-    @app.post("/login")
-    def login(password: str = Form(...)) -> Response:
-        if not auth_store.configured:
-            return RedirectResponse("/setup", status_code=303)
-        if not auth_store.verify(password):
-            return HTMLResponse("<p>Invalid password</p>", 401)
-        session_id, csrf_token = new_session()
-        sessions[session_id] = csrf_token
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie(
-            "wingman_session",
-            session_id,
-            httponly=True,
-            samesite="lax",
-            secure=active_settings.web_host != "127.0.0.1",
-        )
-        return response
-
-    @app.post("/logout")
-    def logout(request: Request) -> Response:
-        session_id = request.cookies.get("wingman_session")
-        sessions.pop(session_id or "", None)
-        response = RedirectResponse("/login", status_code=303)
-        response.delete_cookie("wingman_session")
-        return response
 
     @app.get("/health", response_class=HTMLResponse)
     def health() -> str:
@@ -446,21 +350,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"{escape(str(active_settings.telegram_owner_id or 'not configured'))}</p>"
             + f"<p>Main model {escape(active_settings.openai_main_model)}</p>"
             + f"<p>Timezone {escape(active_settings.timezone)}</p>"
-            + "<h2>Change web password</h2><form method='post' action='/settings/password'>"
-            + "<input type='password' name='password' minlength='12' required>"
-            + "<button>Change password</button></form>"
-            + "<p>Secrets remain masked. Environment-based credential changes are "
-            + "documented for now.</p>"
+            + "<p>This dashboard is local-only. Secrets remain masked and are configured "
+            + "through the environment.</p>"
             + "</body></html>"
         )
-
-    @app.post("/settings/password", response_class=HTMLResponse)
-    def change_password(password: str = Form(...)) -> str:
-        try:
-            auth_store.set_password(password)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return settings_page()
 
     @app.get("/system", response_class=HTMLResponse)
     def system_page() -> str:
@@ -474,7 +367,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             + "<a href='/system/export'>Download JSON export</a>"
             + "<form method='post' action='/system/backup'><button>Backup database</button></form>"
             + "<form method='post' action='/system/update'><button>Safe Git update</button></form>"
-            + "<form method='post' action='/logout'><button>Log out</button></form>"
             + "</body></html>"
         )
 
