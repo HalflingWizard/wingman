@@ -45,7 +45,7 @@ Phase 8 begins this provenance flow. A personal observation can become a pending
 
 Phase 9 separates editable conversation style from application policy. The owner can change `prompts/wingman.md`, while safety, privacy, memory validation, and tool rules remain in code. Retrieved memories carry their notes and source message IDs into dynamic context. The API response snapshot includes a simple word-overlap check showing which retrieved memory statements were mentioned in the answer.
 
-The dashboard will become a shared visual workspace. It will use a small consistent style system, Font Awesome icons with accessible labels, readable memory cards, timeline-style notes, useful status summaries, and expandable diagnostic details. Raw JSON and prompt content will remain available in scrollable inspection panels.
+The dashboard is a shared visual workspace. It uses a small responsive style system, Font Awesome icons with accessible labels, readable memory records, useful status summaries, and diagnostic details. Raw JSON and prompt content remain available in fixed-height, scrollable, copyable inspection panels. The interface stays server-rendered so the local app has no frontend build step.
 
 ## Process lifecycle
 

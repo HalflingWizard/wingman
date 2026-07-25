@@ -16,6 +16,8 @@ Phase 8 adds natural memory proposals. The assistant can ask whether to save a p
 
 Phase 9 adds an editable conversation prompt at `prompts/wingman.md`. Change this file to adjust tone and style. Core safety, privacy, memory validation, and tool rules remain application-controlled. Retrieval context now includes notes and source links, and the API inspector records whether retrieved memories appear in the answer.
 
+Phase 10 redesigns the local dashboard with a shared responsive layout, Font Awesome icons, active navigation, summary cards, clearer panels, and direct tool links. Health, memories, planning, retrieval, API calls, conversations, settings, and system pages now share the same visual workspace. Diagnostic JSON remains highlighted, fixed-height, scrollable, and copyable.
+
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 
 Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.
@@ -24,7 +26,7 @@ When a Telegram memory card is deleted, it first changes to a deleted message. T
 
 ## Next update roadmap
 
-The next update begins with validated model tools for memory search and memory actions. Later phases will improve natural evidence-gathering conversations, memory provenance, context quality, and the dashboard visual design. The dashboard redesign will use a minimal visual style and Font Awesome icons with accessible labels.
+The next update focuses on reliability, evaluation, and release hardening. Natural conversation remains a release requirement, and dashboard diagnostics should stay available without making the chat feel technical.
 
 Natural conversation is a release requirement. Wingman should ask focused questions, use the owner's name and time context naturally, compare new observations with existing memories, and avoid exposing retrieval or tool mechanics in Telegram.
 

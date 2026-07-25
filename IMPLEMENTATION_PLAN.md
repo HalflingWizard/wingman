@@ -245,7 +245,7 @@ Delivered in Phase 9
 
 ### Phase 10
 
-Status planned
+Status complete
 
 Dashboard redesign and useful visual feedback
 
@@ -259,6 +259,14 @@ Dashboard redesign and useful visual feedback
 - Keep long prompts and JSON in fixed-height scrollable panels.
 - Add empty states, success messages, error messages, and mobile-friendly spacing.
 - Keep the interface server-rendered unless a richer interaction is clearly needed.
+
+Delivered in Phase 10
+
+- Added a shared responsive dashboard shell with a dark sidebar, active-page state, summary cards, panels, badges, and mobile spacing.
+- Added Font Awesome icons with visible labels and accessible navigation state.
+- Redesigned the dashboard with useful counts and direct links to the main tools.
+- Applied the shared layout to health, memories, planning, retrieval, API calls, conversations, settings, and system pages.
+- Kept retrieval and API diagnostics in fixed-height highlighted code panels with copy buttons.
 
 Acceptance requirements
 
