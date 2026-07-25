@@ -39,7 +39,7 @@ Wingman should feel like a natural relationship assistant. It should use context
 - Dashboard planning page
 - Relevant upcoming planning context in conversations
 
-The model does not currently create places or events directly. Those actions remain explicit dashboard or application actions.
+Planning records can be created through validated model tools when the owner clearly expresses save intent.
 
 ### Model tools and diagnostics
 
@@ -87,7 +87,6 @@ The test suite covers configuration, persistence, Telegram authorization, memory
 - The dashboard is local-only and unauthenticated
 - Credentials are plaintext in `.env`
 - The project is intended for one trusted owner
-- The model does not directly create places, events, or reminders
 - No external restaurant search or web discovery is included
 - Encrypted secret storage, retention controls, and public deployment are out of scope
 
@@ -188,11 +187,21 @@ Delivered in Phase 2.4
 
 Multimodal-ready storage and diagnostics
 
+Status complete
+
 - Store inbound attachments as a collection with type, provider file ID, local metadata, transcript or analysis status, and source message linkage. Delete downloaded files shortly after the provider request and response finish, with cleanup on success, failure, and timeout.
 - Keep text, transcription, and future media content separate so an image or file can later be sent to a model without changing the conversation contract.
 - Add API-call diagnostics for transcription requests and future attachment requests without exposing credentials.
 - Add size, count, content-type, and timeout limits before enabling additional media types.
 - Keep photos, videos, and documents unsupported in this phase and return a clear explanation when received.
+
+Delivered in Phase 2.5
+
+- Added short-lived attachment metadata linked to the source conversation message.
+- Added attachment expiration and processing status without storing audio bytes or local files.
+- Added transcription API diagnostics with model, file metadata, byte count, latency, and retention status.
+- Added cleanup helpers for any future temporary local attachment paths.
+- Kept voice processing on the existing transcript pipeline and kept unsupported media rejected.
 
 ### Phase 2.6
 

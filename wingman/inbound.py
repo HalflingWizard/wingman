@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -28,3 +29,10 @@ class InboundMessage:
     @property
     def has_temporary_input(self) -> bool:
         return bool(self.attachments)
+
+
+def cleanup_inbound_attachments(message: InboundMessage) -> None:
+    """Delete only explicitly created local attachment files."""
+    for attachment in message.attachments:
+        if attachment.local_path:
+            Path(attachment.local_path).unlink(missing_ok=True)

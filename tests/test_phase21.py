@@ -81,3 +81,5 @@ def test_model_client_transcribes_voice_without_persisting_audio():
     client.client = SimpleNamespace(audio=SimpleNamespace(transcriptions=FakeTranscriptions()))
     transcript = asyncio.run(client.transcribe(b"audio", "voice.ogg", "gpt-4o-mini-transcribe"))
     assert transcript == "A transcribed message"
+    assert client.last_transcription_snapshot["audio_retained"] is False
+    assert "audio" not in client.last_transcription_snapshot

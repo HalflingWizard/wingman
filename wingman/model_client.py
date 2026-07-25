@@ -5,6 +5,7 @@
 
 import json
 from collections.abc import Callable
+from time import perf_counter
 from typing import Any, cast
 
 from openai import AsyncOpenAI
@@ -254,6 +255,7 @@ class ModelClient:
         self.summary_model = settings.openai_summary_model
         self.last_usage: tuple[int | None, int | None] = (None, None)
         self.last_request_snapshot: dict[str, Any] = {}
+        self.last_transcription_snapshot: dict[str, Any] = {}
 
     async def reply(
         self,
@@ -396,11 +398,30 @@ class ModelClient:
         return response.data[0].embedding
 
     async def transcribe(self, audio: bytes, filename: str, model: str) -> str:
-        response = await self.client.audio.transcriptions.create(
-            model=model,
-            file=(filename, audio),
-        )
-        transcript = getattr(response, "text", "")
-        if not isinstance(transcript, str) or not transcript.strip():
-            raise RuntimeError("The transcription response was empty")
-        return transcript.strip()
+        started = perf_counter()
+        self.last_transcription_snapshot = {
+            "model": model,
+            "filename": filename,
+            "audio_bytes": len(audio),
+            "audio_retained": False,
+        }
+        try:
+            response = await self.client.audio.transcriptions.create(
+                model=model,
+                file=(filename, audio),
+            )
+            transcript = getattr(response, "text", "")
+            if not isinstance(transcript, str) or not transcript.strip():
+                raise RuntimeError("The transcription response was empty")
+            self.last_transcription_snapshot["response"] = {
+                "transcript_chars": len(transcript.strip()),
+                "audio_retained": False,
+                "latency_ms": round((perf_counter() - started) * 1000),
+            }
+            return transcript.strip()
+        except Exception as exc:
+            self.last_transcription_snapshot["error"] = str(exc)
+            self.last_transcription_snapshot["latency_ms"] = round(
+                (perf_counter() - started) * 1000
+            )
+            raise

@@ -17,6 +17,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Use the owner's name, primary person's name, timezone, and current time naturally
 - Keep facts, observations, and inferences separate
 - Accept Telegram voice messages, transcribe them, and process them like text
+- Keep temporary attachment metadata for traceability while deleting local input files after processing
 - Inspect prompts, dynamic context, tool calls, retrieval scores, token use, latency, and errors
 
 ## Telegram experience
@@ -92,6 +93,8 @@ WINGMAN_OPENAI_SUMMARY_MODEL=gpt-5-nano
 WINGMAN_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 WINGMAN_OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 WINGMAN_VOICE_MAX_BYTES=25000000
+WINGMAN_MAX_ATTACHMENTS=5
+WINGMAN_ATTACHMENT_RETENTION_SECONDS=600
 WINGMAN_USER_NAME=
 WINGMAN_PRIMARY_PERSON_NAME=
 WINGMAN_TIMEZONE=UTC

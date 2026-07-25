@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import Awaitable
 from contextlib import suppress
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from time import perf_counter
 from typing import Any
@@ -23,7 +24,7 @@ from aiogram.types import (
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
-from wingman.inbound import InboundAttachment, InboundMessage
+from wingman.inbound import InboundAttachment, InboundMessage, cleanup_inbound_attachments
 from wingman.lifecycle import is_paused
 from wingman.model_client import AVAILABLE_TOOLS, ModelClient
 from wingman.models import Event, Memory, Place, Reminder, SavedIdea, now_utc
@@ -50,6 +51,7 @@ from wingman.services import (
     mark_card_deleted,
     pending_deleted_cards,
     planning_context,
+    save_message_attachments,
     save_summary,
     save_telegram_card,
     save_telegram_planning_card,
@@ -165,6 +167,7 @@ async def transcribe_voice(
         provider_file_id=message.voice.file_id,
         filename="wingman-voice.ogg",
         content_type="audio/ogg",
+        expires_at=datetime.now(UTC) + timedelta(seconds=settings.attachment_retention_seconds),
     )
     return InboundMessage(
         text=transcript,
@@ -313,6 +316,15 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         except (RuntimeError, ValueError) as exc:
             await message.answer(f"I could not process that voice message. {exc}")
             return
+        if len(inbound.attachments) > settings.max_attachments:
+            await message.answer("I can process only a small number of attachments at a time.")
+            cleanup_inbound_attachments(inbound)
+            return
+        transcription_snapshot = (
+            dict(model_client.last_transcription_snapshot)
+            if model_client is not None and inbound.source_type == "telegram_voice"
+            else {}
+        )
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, settings.user_name)
             old_cards = pending_deleted_cards(session, user, message.chat.id)
@@ -342,6 +354,41 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 session, conversation, "user", inbound.text, message.message_id
             )
             user_message_id = user_message.id
+            save_message_attachments(session, user_message.id, inbound.attachments)
+            if transcription_snapshot:
+                transcription_run = create_agent_run(
+                    session,
+                    conversation,
+                    str(transcription_snapshot.get("model", settings.openai_transcription_model)),
+                    json.dumps(
+                        {
+                            "type": "audio_transcription",
+                            "source_type": inbound.source_type,
+                            "attachments": [
+                                {
+                                    "filename": attachment.filename,
+                                    "content_type": attachment.content_type,
+                                    "provider_file_id": attachment.provider_file_id,
+                                    "expires_at": attachment.expires_at.isoformat(),
+                                }
+                                for attachment in inbound.attachments
+                            ],
+                            "audio_bytes": transcription_snapshot.get("audio_bytes"),
+                            "audio_retained": False,
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+                finish_agent_run(
+                    session,
+                    transcription_run.id,
+                    "completed" if "error" not in transcription_snapshot else "failed",
+                    transcription_snapshot.get("latency_ms"),
+                    error=transcription_snapshot.get("error"),
+                    response_snapshot=json.dumps(
+                        transcription_snapshot.get("response", {}), ensure_ascii=False
+                    ),
+                )
             results = retrieve_memories(session, user, inbound.text, query_vector=query_vector)
             log_retrieval(session, user, conversation, retrieval_query(inbound.text, user), results)
             summary = get_or_create_summary(session, conversation)
@@ -495,6 +542,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     output_tokens=model_client.last_usage[1],
                 )
             await message.answer("I ran into a problem while replying. Please try again.")
+            cleanup_inbound_attachments(inbound)
             return
         with sessions() as session:
             finish_agent_run(
@@ -612,6 +660,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                         message.chat.id,
                         card.message_id,
                     )
+        cleanup_inbound_attachments(inbound)
 
     dispatcher.include_router(router)
     return dispatcher

@@ -29,6 +29,7 @@ def initialize_database(settings: Settings) -> None:
         Memory,
         MemoryNote,
         Message,
+        MessageAttachment,
         PendingState,
         Place,
         Reminder,

@@ -46,6 +46,22 @@ class Message(Base):
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
 
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), index=True)
+    source_type: Mapped[str] = mapped_column(String(40))
+    provider_file_id: Mapped[str] = mapped_column(String(300))
+    filename: Mapped[str] = mapped_column(String(300), default="")
+    content_type: Mapped[str] = mapped_column(String(120), default="")
+    processing_status: Mapped[str] = mapped_column(String(30), default="received")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class ConversationSummary(Base):
     __tablename__ = "conversation_summaries"
 

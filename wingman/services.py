@@ -15,6 +15,7 @@ from wingman.models import (
     Memory,
     MemoryNote,
     Message,
+    MessageAttachment,
     PendingState,
     Place,
     Reminder,
@@ -72,6 +73,27 @@ def add_message(
     session.add(message)
     session.commit()
     return message
+
+
+def save_message_attachments(
+    session: Session, message_id: str, attachments: tuple[Any, ...]
+) -> list[MessageAttachment]:
+    records = [
+        MessageAttachment(
+            message_id=message_id,
+            source_type=attachment.source_type,
+            provider_file_id=attachment.provider_file_id,
+            filename=attachment.filename or "",
+            content_type=attachment.content_type or "",
+            expires_at=attachment.expires_at,
+            processing_status="processed",
+            processed_at=datetime.now(UTC),
+        )
+        for attachment in attachments
+    ]
+    session.add_all(records)
+    session.commit()
+    return records
 
 
 MEMORY_STATUSES = {"confirmed", "observed", "inferred", "uncertain", "corrected", "deleted"}
