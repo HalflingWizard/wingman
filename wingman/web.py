@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from wingman import __version__
 from wingman.config import Settings, get_settings, save_runtime_settings
 from wingman.database import make_engine, session_factory
-from wingman.lifecycle import is_paused, set_paused
+from wingman.lifecycle import is_paused, schedule_restart, set_paused
 from wingman.models import AgentRun, Conversation, ConversationSummary, User
 from wingman.prompting import load_prompt, save_prompt
 from wingman.services import (
@@ -177,6 +177,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session.add(user)
             session.commit()
             session.refresh(user)
+        elif active_settings.user_name and user.name != active_settings.user_name:
+            user.name = active_settings.user_name
+            session.commit()
         return user
 
     @app.get("/", response_class=HTMLResponse)
@@ -577,7 +580,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def update_system() -> str:
         try:
             branch = safe_update(active_settings)
-            message = f"Update completed on branch {branch}"
+            message = (
+                f"Update completed on branch {branch}. Wingman is restarting now so the new "
+                "code and tool definitions are loaded."
+            )
+            schedule_restart()
         except Exception as exc:
             message = f"Update failed {exc}"
         return page_shell(

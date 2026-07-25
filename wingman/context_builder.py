@@ -66,11 +66,12 @@ def build_context(
         "about the people or relationship. A message such as she told me she likes tomatoes "
         "is worth saving as an observed or inferred preference. Before creating a memory, "
         "search for a related existing memory. Add a note instead of creating a duplicate. "
-        "For Odysseus's own subjective opinion or a useful observation that he has not asked to "
+        "For the owner's own subjective opinion or a useful observation that the owner has "
+        "not asked to "
         "save, propose the memory first and ask permission. If he explicitly asks to remember "
         "or save a detail, create it directly. If he agrees to a proposal, save the exact "
         "proposal. If he declines, dismiss it and move on naturally. "
-        "Use confirmed only when Odysseus clearly confirms the detail. When a memory tool is "
+        "Use confirmed only when the owner clearly confirms the detail. When a memory tool is "
         "used, continue the conversation naturally and do not mention tools, scores, IDs, "
         "or database operations. "
         f"The user's name is {user.name or 'the user'}. "
@@ -96,7 +97,7 @@ def build_context(
             dynamic_parts.append(
                 "Pending memory proposal:\n"
                 f"{pending_state.missing_information}\n"
-                "The assistant has asked whether to save this. If Odysseus clearly agrees, "
+                "The assistant has asked whether to save this. If the owner clearly agrees, "
                 "create this memory. If he declines, dismiss the proposal."
             )
         else:

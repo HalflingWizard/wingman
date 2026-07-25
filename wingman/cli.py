@@ -14,6 +14,7 @@ import uvicorn
 from wingman import __version__
 from wingman.config import Settings, get_settings
 from wingman.database import initialize_database
+from wingman.lifecycle import restart_process
 from wingman.reminder_worker import run_reminder_worker
 from wingman.system import safe_update
 from wingman.telegram_bot import run_bot
@@ -114,7 +115,8 @@ def main() -> None:
         start(no_browser=False)
     elif args.command == "update":
         branch = safe_update(get_settings())
-        print(f"Updated branch {branch}")
+        print(f"Updated branch {branch}. Restarting Wingman to load the new code.", flush=True)
+        restart_process()
 
 
 if __name__ == "__main__":

@@ -151,7 +151,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             await message.answer("Use /remember followed by the detail you want to save.")
             return
         with sessions() as session:
-            user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
+            user = get_or_create_user(session, message.from_user.id, settings.user_name)
             memory = create_memory(session, user, statement)
             memory_id = memory.id
             card_text, keyboard = memory_card(memory)
@@ -242,7 +242,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             await message.answer(f"I could not process that voice message. {exc}")
             return
         with sessions() as session:
-            user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
+            user = get_or_create_user(session, message.from_user.id, settings.user_name)
             old_cards = pending_deleted_cards(session, user, message.chat.id)
         for old_card in old_cards:
             bot = message.bot
@@ -264,7 +264,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 pass
         user_message_id: str | None = None
         with sessions() as session:
-            user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
+            user = get_or_create_user(session, message.from_user.id, settings.user_name)
             conversation = get_or_create_conversation(session, user)
             user_message = add_message(
                 session, conversation, "user", inbound.text, message.message_id

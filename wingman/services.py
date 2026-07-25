@@ -36,6 +36,9 @@ def get_or_create_user(session: Session, telegram_user_id: int, name: str = "") 
         user = User(telegram_user_id=telegram_user_id, name=name)
         session.add(user)
         session.flush()
+    elif name and user.name != name:
+        user.name = name
+        session.flush()
     return user
 
 
