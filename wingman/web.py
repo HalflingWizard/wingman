@@ -56,7 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session_id = request.cookies.get("wingman_session")
         csrf_token = sessions.get(session_id or "")
         if request.url.path not in public and csrf_token is None:
-            return RedirectResponse("/login", status_code=303)
+            target = "/setup" if not auth_store.configured else "/login"
+            return RedirectResponse(target, status_code=303)
         if request.method == "POST" and request.url.path not in {"/login", "/setup"}:
             body = await request.body()
             request._body = body
@@ -111,6 +112,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/login")
     def login(password: str = Form(...)) -> Response:
+        if not auth_store.configured:
+            return RedirectResponse("/setup", status_code=303)
         if not auth_store.verify(password):
             return HTMLResponse("<p>Invalid password</p>", 401)
         session_id, csrf_token = new_session()
