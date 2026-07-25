@@ -207,7 +207,14 @@ Delivered in Phase 2.5
 
 Dashboard visual refinement
 
+Status complete
+
 - Establish one consistent rule for icons. Use them consistently with labels, or remove decorative icons from secondary panel headers.
+- Improve memory cards with larger statement editing, clearer notes, and grouped actions.
+- Improve planning forms and records with responsive cards, structured fields, and readable status rows.
+- Present conversations as distinct user and assistant message bubbles.
+- Keep API and retrieval diagnostics in the existing fixed-height highlighted code panels.
+- Verify the shared dashboard layout at desktop and narrow screen widths.
 - Redesign memory cards with a clear statement, status and confidence badges, visible notes, source context, and grouped actions.
 - Give the add-memory form a large statement textarea and a clearer field layout.
 - Improve note editing and deletion with readable rows and distinct primary and destructive actions.

@@ -108,21 +108,21 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         ".page-header{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1.7rem}.eyebrow{color:#65738a;"
         "font-size:.76rem;font-weight:750;letter-spacing:.08em;text-transform:uppercase;margin:0 0 .3rem}.page-header h1{margin:0;font-size:2rem;"
         "letter-spacing:-.03em}.muted{color:#68778d}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin:1.2rem 0 1.7rem}"
-        ".stat-card,.panel,.quick-card{background:#fff;border:1px solid #e3e8f1;border-radius:1rem;box-shadow:0 8px 24px rgba(28,45,80,.05)}"
+        ".stat-card,.panel,.quick-card,.record{background:#fff;border:1px solid #e3e8f1;border-radius:1rem;box-shadow:0 8px 24px rgba(28,45,80,.05)}"
         ".stat-card{padding:1.1rem 1.2rem}.stat-icon{color:#5968df;margin-bottom:.6rem}.stat-value{display:block;font-size:1.7rem;font-weight:760}.stat-label{color:#68778d;font-size:.82rem}"
-        ".panel{padding:1.25rem;margin:1rem 0}.panel h2,.panel h3{margin-top:0}.panel-header{display:flex;justify-content:space-between;align-items:center;gap:1rem}"
+        ".panel{padding:1.35rem;margin:1rem 0}.panel h2,.panel h3{margin-top:0}.panel-header{display:flex;justify-content:space-between;align-items:center;gap:1rem}.panel-header h2{display:flex;align-items:center;gap:.55rem}.panel-header h2 i,.section-title i{color:#5968df;font-size:.95em}"
         ".quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem}.quick-card{padding:1rem;color:inherit}.quick-card:hover{border-color:#aab5ff;text-decoration:none;transform:translateY(-1px)}"
         ".quick-card i{color:#5968df;font-size:1.05rem}.quick-card strong{display:block;margin:.55rem 0 .2rem}.quick-card small{color:#68778d}"
         ".badge{display:inline-flex;align-items:center;border-radius:999px;padding:.2rem .55rem;font-size:.72rem;font-weight:700;background:#edf1ff;color:#4658c8}"
-        ".stack{display:grid;gap:.7rem}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.form-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}"
-        "input,select,textarea{font:inherit;border:1px solid #cbd4e2;border-radius:.55rem;padding:.55rem .65rem;background:#fff;max-width:100%}"
+        ".stack{display:grid;gap:.8rem}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.form-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem}.field{display:grid;gap:.35rem}.field-wide{grid-column:1/-1}.field label,.stack>label{display:grid;gap:.35rem;font-size:.82rem;font-weight:700;color:#42516a}.form-actions{display:flex;flex-wrap:wrap;gap:.55rem;align-items:center}.compact-form{padding:.8rem;border-radius:.7rem;background:#f7f9fc;border:1px solid #e7ebf3}"
+        "input,select,textarea{font:inherit;border:1px solid #cbd4e2;border-radius:.55rem;padding:.6rem .7rem;background:#fff;max-width:100%;width:100%;color:#182230}textarea{min-height:7rem;resize:vertical}input:focus,select:focus,textarea:focus{outline:3px solid rgba(89,104,223,.16);border-color:#7180e8}"
         "button,.button{font:inherit;border:0;border-radius:.55rem;padding:.55rem .75rem;background:#4f60d8;color:#fff;cursor:pointer;font-weight:650}"
         "button:hover,.button:hover{background:#3f4fc1;text-decoration:none}.button-secondary{background:#eef1f8;color:#34425b}.button-danger{background:#fff0f0;color:#b13d4b}"
         ".code-panel{border:1px solid #d8dfeb;border-radius:.75rem;margin:1rem 0;overflow:hidden;background:#0d1117}.code-toolbar{display:flex;justify-content:space-between;"
         "align-items:center;padding:.55rem .75rem;background:#192231;color:#e5edf9;font-size:.82rem}.code-toolbar button{padding:.3rem .6rem;background:#34425b;font-size:.75rem}"
         ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
-        ".record-list{display:grid;gap:.8rem;padding:0;list-style:none}.record{background:#fff;border:1px solid #e3e8f1;border-radius:.8rem;padding:1rem}.record p:last-child{margin-bottom:0}"
-        "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2{grid-template-columns:1fr}}"
+        ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
+        "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
         "</style><script>"
         "function copyCode(id,button){const value=document.getElementById(id).textContent; navigator.clipboard.writeText(value).then(()=>{const old=button.textContent;button.textContent='Copied';setTimeout(()=>button.textContent=old,1200);});}"
         "function escapeCode(text){return text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll(String.fromCharCode(34),'&quot;');}"
@@ -222,12 +222,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Context design</p><h1>Context</h1>"
             "<p class='muted'>Control the editable conversation guidance and understand what changes each turn.</p></div></header>"
-            "<section class='panel'><div class='panel-header'><div><h2>Static context</h2>"
+            "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-pen-to-square'></i> Static context</h2>"
             "<p class='muted'>This guidance is included on every model request. Application safety and tool rules remain protected in code.</p></div>"
             "<i class='fa-solid fa-file-pen'></i></div>"
             "<form method='post' action='/context'><textarea name='prompt' rows='18' maxlength='12000' style='width:100%' required>"
             f"{prompt}</textarea><p><button><i class='fa-solid fa-floppy-disk'></i> Save static context</button></p></form></section>"
-            "<section class='panel'><div class='panel-header'><div><h2>Dynamic context</h2>"
+            "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-layer-group'></i> Dynamic context</h2>"
             "<p class='muted'>This is assembled for each message based on the current conversation.</p></div>"
             "<i class='fa-solid fa-arrows-rotate'></i></div>"
             "<ul><li>Relevant saved memories and their notes</li>"
@@ -253,45 +253,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 action = "restore" if memory.status == "deleted" else "delete"
                 action_label = "Restore" if action == "restore" else "Delete"
                 notes = "".join(
-                    f"<div><small>{escape(note.note_type)}</small>"
+                    "<div class='note-item'>"
+                    f"<small>{escape(note.note_type)}</small><p>{escape(note.text)}</p>"
                     f"<form method='post' action='/notes/{note.id}/update'>"
                     f"<input name='note_text' value='{escape(note.text, quote=True)}' "
-                    "maxlength='2000' required><button>Save note</button></form>"
-                    f"<form method='post' action='/notes/{note.id}/delete'>"
-                    "<button>Remove note</button></form></div>"
+                    "maxlength='2000' required aria-label='Edit note'><button class='button-secondary'>"
+                    "<i class='fa-solid fa-floppy-disk'></i> Save</button></form>"
+                    f"<form method='post' action='/notes/{note.id}/delete' class='record-actions'>"
+                    "<button class='button-danger'><i class='fa-solid fa-trash'></i> Remove</button></form></div>"
                     for note in list_memory_notes(session, user, memory.id)
                 )
                 card = (
-                    "<article class='record'>"
-                    f"<p><strong>{memory.type}</strong> {memory.status}</p>"
-                    f"<p>{escape(memory.statement)}</p>"
-                    f"{notes}<form method='post' action='/memories/{memory.id}/update'>"
-                    f"<input name='statement' value='{escape(memory.statement, quote=True)}' "
-                    "maxlength='4000' required><button>Save</button></form>"
-                    f"<form method='post' action='/memories/{memory.id}/notes'>"
-                    "<input name='note_text' placeholder='Evidence or context' "
-                    "maxlength='2000' required>"
-                    "<button>Add note</button></form>"
-                    f"<form method='post' action='/memories/{memory.id}/{action}' "
-                    "style='display:inline'>"
-                    f"<button>{action_label}</button></form>"
+                    "<article class='record memory-card'><div class='record-top'><div class='record-meta'>"
+                    f"<span class='badge'><i class='fa-solid fa-tag'></i> {escape(memory.type)}</span>"
+                    f"<span class='badge'>{escape(memory.status)}</span></div></div>"
+                    f"<p class='record-statement'>{escape(memory.statement)}</p>"
+                    f"<div class='note-list'>{notes or "<p class='muted'>No notes yet.</p>"}</div>"
+                    f"<form class='stack compact-form edit-form' method='post' action='/memories/{memory.id}/update'>"
+                    "<label>Edit statement <textarea name='statement' maxlength='4000' required>"
+                    f"{escape(memory.statement)}</textarea></label><div class='form-actions'><button>"
+                    "<i class='fa-solid fa-floppy-disk'></i> Save statement</button></div></form>"
+                    f"<form class='form-row' method='post' action='/memories/{memory.id}/notes'>"
+                    "<input name='note_text' placeholder='Add evidence or context' maxlength='2000' required>"
+                    "<button class='button-secondary'><i class='fa-solid fa-note-sticky'></i> Add note</button></form>"
+                    "<div class='record-actions'>"
+                    f"<form method='post' action='/memories/{memory.id}/{action}'><button class='button-danger'>"
+                    f"<i class='fa-solid fa-{'rotate-left' if action == 'restore' else 'trash'}'></i> {action_label}</button></form>"
                 )
                 if memory.status == "inferred":
                     card += (
                         f"<form method='post' action='/memories/{memory.id}/confirm' "
-                        "style='display:inline'><button>Confirm</button></form>"
+                        "class='record-actions'><button><i class='fa-solid fa-check'></i> Confirm</button></form>"
                     )
-                card += "</article>"
+                card += "</div></article>"
                 rows.append(card)
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Memory space</p><h1>Memories</h1>"
             "<p class='muted'>Review what Wingman knows, where it came from, and what can be changed.</p></div></header>"
-            "<section class='panel'><div class='panel-header'><h2>Add a memory</h2><i class='fa-solid fa-plus'></i></div>"
-            "<form class='form-row' method='post' action='/memories'>"
-            "<input name='statement' placeholder='Memory statement' maxlength='4000' required>"
-            "<select name='memory_type'><option value='fact'>Fact</option><option value='observation'>Observation</option>"
+            "<section class='panel'><div class='panel-header'><h2><i class='fa-solid fa-plus'></i> Add a memory</h2></div>"
+            "<form class='stack' method='post' action='/memories'>"
+            "<label class='field'>Statement <textarea name='statement' placeholder='Write the detail you want Wingman to remember' maxlength='4000' required></textarea></label>"
+            "<div class='form-actions'><select name='memory_type'><option value='fact'>Fact</option><option value='observation'>Observation</option>"
             "<option value='inference'>Inference</option><option value='preference'>Preference</option></select>"
-            "<button><i class='fa-solid fa-plus' aria-hidden='true'></i> Add memory</button></form></section>"
+            "<button><i class='fa-solid fa-plus' aria-hidden='true'></i> Add memory</button></div></form></section>"
             "<section class='record-list'>" + "".join(rows) + "</section>"
         )
         return page_shell("Memories", body, "memories")
@@ -403,50 +407,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             events = list_events(session, user)
             reminders = list_reminders(session, user)
         place_rows = "".join(
-            f"<li><strong>{escape(place.name)}</strong> {escape(place.status)} "
-            f"{escape(place.address)} {escape(place.description)}</li>"
+            f"<li class='item-row'><i class='fa-solid fa-location-dot'></i><div><strong>{escape(place.name)}</strong>"
+            f"<small>{escape(place.status)} · {escape(place.city or place.address or 'Location unknown')}</small>"
+            f"<small>{escape(place.description)}</small></div></li>"
             for place in places
         )
         idea_rows = "".join(
-            f"<li><strong>{escape(idea.title)}</strong> {escape(idea.reason)}</li>"
+            f"<li class='item-row'><i class='fa-solid fa-lightbulb'></i><div><strong>{escape(idea.title)}</strong>"
+            f"<small>{escape(idea.reason or 'No reason added yet')}</small></div></li>"
             for idea in ideas
         )
         event_rows = "".join(
-            f"<li><strong>{escape(event.title)}</strong> {escape(event.start_at.isoformat())} "
-            f"{escape(event.status)}</li>"
+            f"<li class='item-row'><i class='fa-solid fa-calendar-day'></i><div><strong>{escape(event.title)}</strong>"
+            f"<small>{escape(event.start_at.isoformat())} · {escape(event.status)}</small>"
+            f"<small>{escape(event.description)}</small></div></li>"
             for event in events
         )
         reminder_rows = "".join(
-            f"<li><strong>{escape(reminder.title)}</strong> "
-            f"{escape(reminder.scheduled_at.isoformat())} {escape(reminder.status)}</li>"
+            f"<li class='item-row'><i class='fa-solid fa-bell'></i><div><strong>{escape(reminder.title)}</strong>"
+            f"<small>{escape(reminder.scheduled_at.isoformat())} · {escape(reminder.status)}</small></div></li>"
             for reminder in reminders
         )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Relationship planning</p><h1>Planning</h1>"
             "<p class='muted'>Collect places, ideas, events, and reminders in one calm workspace.</p></div></header>"
-            "<div class='grid-2'><section class='panel'>"
-            + "<h2>Add place</h2><form method='post' action='/planning/places'>"
-            + "<input name='name' placeholder='Name' required>"
-            + "<input name='address' placeholder='Address'>"
-            + "<input name='city' placeholder='City'>"
-            + "<input name='description' placeholder='Description'>"
-            + "<button>Save place</button></form><ul>"
+            "<div class='planning-grid'><section class='panel'>"
+            + "<h2 class='section-title'><i class='fa-solid fa-location-dot'></i> Add place</h2><form class='stack compact-form' method='post' action='/planning/places'>"
+            + "<input name='name' placeholder='Name' required><input name='address' placeholder='Address'>"
+            + "<input name='city' placeholder='City'><textarea name='description' placeholder='Description'></textarea>"
+            + "<button><i class='fa-solid fa-plus'></i> Save place</button></form><ul class='item-list'>"
             + place_rows
-            + "</ul></section><section class='panel'><h2>Add saved idea</h2><form method='post' action='/planning/ideas'>"
-            + "<input name='title' placeholder='Idea' required>"
-            + "<input name='reason' placeholder='Why it fits'>"
-            + "<button>Save idea</button></form><ul>"
+            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-lightbulb'></i> Add saved idea</h2><form class='stack compact-form' method='post' action='/planning/ideas'>"
+            + "<input name='title' placeholder='Idea' required><textarea name='reason' placeholder='Why it fits'></textarea>"
+            + "<button><i class='fa-solid fa-plus'></i> Save idea</button></form><ul class='item-list'>"
             + idea_rows
-            + "</ul></section></div><div class='grid-2'><section class='panel'><h2>Add event</h2><form method='post' action='/planning/events'>"
-            + "<input name='title' placeholder='Event' required>"
-            + "<input name='start_at' type='datetime-local' required>"
-            + "<input name='description' placeholder='Description'>"
-            + "<button>Save event</button></form><ul>"
+            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-calendar-day'></i> Add event</h2><form class='stack compact-form' method='post' action='/planning/events'>"
+            + "<input name='title' placeholder='Event' required><input name='start_at' type='datetime-local' required>"
+            + "<textarea name='description' placeholder='Description'></textarea><button><i class='fa-solid fa-plus'></i> Save event</button></form><ul class='item-list'>"
             + event_rows
-            + "</ul></section><section class='panel'><h2>Add reminder</h2><form method='post' action='/planning/reminders'>"
-            + "<input name='title' placeholder='Reminder' required>"
-            + "<input name='scheduled_at' type='datetime-local' required>"
-            + "<button>Save reminder</button></form><ul>"
+            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-bell'></i> Add reminder</h2><form class='stack compact-form' method='post' action='/planning/reminders'>"
+            + "<input name='title' placeholder='Reminder' required><input name='scheduled_at' type='datetime-local' required>"
+            + "<button><i class='fa-solid fa-plus'></i> Save reminder</button></form><ul class='item-list'>"
             + reminder_rows
             + "</ul></section></div>"
         )
@@ -475,17 +476,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Configuration</p><h1>Settings</h1>"
             "<p class='muted'>Runtime values are read from the environment. Secrets stay masked here.</p></div></header>"
-            "<section class='panel'><h2>Connection and identity</h2>"
+            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-sliders'></i> Connection and identity</h2>"
             "<form method='post' action='/settings' class='stack'>"
-            f"<label>Telegram bot token <input type='password' name='telegram_bot_token' placeholder='{mask(active_settings.telegram_bot_token)}'></label>"
-            f"<label>OpenAI API key <input type='password' name='openai_api_key' placeholder='{mask(active_settings.openai_api_key)}'></label>"
-            f"<label>Telegram owner ID <input name='telegram_owner_id' value='{escape(str(active_settings.telegram_owner_id or ''))}'></label>"
-            f"<label>Your name <input name='user_name' value='{escape(active_settings.user_name, quote=True)}'></label>"
-            f"<label>Primary person's name <input name='primary_person_name' value='{escape(active_settings.primary_person_name, quote=True)}'></label>"
-            "<h2>Models and time</h2>"
-            f"<label>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
-            f"<label>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
-            f"<label>Timezone <input name='timezone' value='{escape(active_settings.timezone, quote=True)}'></label>"
+            "<div class='settings-grid'>"
+            f"<label class='field'>Telegram bot token <input type='password' name='telegram_bot_token' placeholder='{mask(active_settings.telegram_bot_token)}'></label>"
+            f"<label class='field'>OpenAI API key <input type='password' name='openai_api_key' placeholder='{mask(active_settings.openai_api_key)}'></label>"
+            f"<label class='field'>Telegram owner ID <input name='telegram_owner_id' value='{escape(str(active_settings.telegram_owner_id or ''))}'></label>"
+            f"<label class='field'>Your name <input name='user_name' value='{escape(active_settings.user_name, quote=True)}'></label>"
+            f"<label class='field'>Primary person's name <input name='primary_person_name' value='{escape(active_settings.primary_person_name, quote=True)}'></label>"
+            "<h2 class='section-title'><i class='fa-solid fa-microchip'></i> Models and time</h2>"
+            f"<label class='field'>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
+            f"<label class='field'>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
+            f"<label class='field'>Timezone <input name='timezone' value='{escape(active_settings.timezone, quote=True)}'></label></div>"
             "<p><button><i class='fa-solid fa-floppy-disk'></i> Save settings</button></p></form></section>"
             "<section class='panel'><p>This dashboard is local-only. Blank secret fields keep the current values. Settings are stored in the local .env file, which is plaintext and should not be exposed.</p></section>"
         )
@@ -690,14 +692,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                 )
                 messages = "".join(
-                    f"<p><strong>{escape(message.sender)}</strong> {escape(message.text)}</p>"
+                    f"<div class='message message-{'user' if message.sender == 'user' else 'assistant'}'>"
+                    f"<div class='message-label'><i class='fa-solid fa-{'user' if message.sender == 'user' else 'robot'}'></i>"
+                    f"{escape(message.sender.capitalize())}</div><p>{escape(message.text)}</p></div>"
                     for message in conversation.messages[-20:]
                 )
                 cards.append(
                     "<article class='record'>"
                     f"<h2>Conversation {conversation.id}</h2>"
-                    f"<h3>Summary</h3><pre>{escape(summary.summary_text if summary else '')}</pre>"
-                    f"<h3>Recent messages</h3>{messages}</article>"
+                    f"<h3 class='section-title'><i class='fa-solid fa-scroll'></i> Summary</h3><pre>{escape(summary.summary_text if summary else '')}</pre>"
+                    f"<h3 class='section-title'><i class='fa-solid fa-comments'></i> Recent messages</h3><div class='conversation-list'>{messages}</div></article>"
                 )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Conversation history</p><h1>Conversations</h1>"
