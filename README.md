@@ -1,58 +1,100 @@
 # Wingman
 
-Wingman is a private Telegram relationship assistant with a local administration interface. It stores conversation history and organizes memories, places, events, and reminders.
+Wingman is a private Telegram relationship assistant for one owner. It helps you remember useful details, understand ongoing conversations, plan thoughtful dates, and review how an AI response was produced.
 
-## Version
+It is designed to feel like a natural conversation with a thoughtful friend. Memory tools, retrieval, prompts, and diagnostics work behind the scenes. Telegram stays focused on the conversation, while the local dashboard gives you control and transparency.
 
-The current application version is `1.0.0`. This is the first stable baseline for the implemented local dashboard, Telegram bot, memory system, retrieval inspector, planning features, exports, backups, and lifecycle controls.
+## What it helps with
 
-## Current status
+- Remember durable preferences, observations, interests, and relationship details
+- Keep memory notes with supporting context and source messages
+- Retrieve relevant memories using lexical and semantic matching
+- Keep recent conversation history and rolling summaries
+- Suggest uncertain memories before saving them
+- Plan places, ideas, events, and one-time reminders
+- Send due reminders through Telegram
+- Use the owner's name, primary person's name, timezone, and current time naturally
+- Keep facts, observations, and inferences separate
+- Inspect prompts, dynamic context, tool calls, retrieval scores, token use, latency, and errors
 
-The Phase 1 through Phase 6 implementation is included in version `1.0.0`. It provides configuration, SQLite persistence, the local dashboard, Telegram owner authorization, OpenAI conversation replies, memories, retrieval, planning, API-call inspection, exports, backups, and bot lifecycle controls.
+## Telegram experience
 
-Phase 7 is now implemented on top of the `1.0.0` baseline. The default conversation and summary model is `gpt-5-nano`, with low reasoning effort and concise output. The model can request validated memory searches and controlled memory changes. Tool calls are audited and shown in the API-call inspector. Memory deletion remains an explicit owner action.
+Wingman is built to keep ordinary conversation ordinary. It does not save every greeting, suggestion, or temporary plan. It proposes uncertain personal observations before saving them and shows saved memories as visible Telegram cards with owner controls.
 
-Phase 8 adds natural memory proposals. The assistant can ask whether to save a personal observation, save it only after a clear yes, dismiss it after a no, and attach a source note to model-created memories.
+The assistant can use saved context naturally, for example by connecting a known preference to a gift idea. It does not mention database IDs, retrieval scores, internal tools, or prompt mechanics in normal replies.
 
-Phase 9 adds an editable conversation prompt at `prompts/wingman.md`. Change this file to adjust tone and style. Core safety, privacy, memory validation, and tool rules remain application-controlled. Retrieval context now includes notes and source links, and the API inspector records whether retrieved memories appear in the answer.
+## Local dashboard
 
-Phase 10 redesigns the local dashboard with a shared responsive layout, Font Awesome icons, active navigation, summary cards, clearer panels, and direct tool links. Health, memories, planning, retrieval, API calls, conversations, settings, and system pages now share the same visual workspace. Diagnostic JSON remains highlighted, fixed-height, scrollable, and copyable.
+The dashboard runs on the same machine as the bot and is available at `http://127.0.0.1:8080/` by default. Wingman tries nearby ports when the default port is busy and opens the selected dashboard when possible.
 
-Phase 11 adds a Context page for editing `prompts/wingman.md` and explaining how dynamic context is assembled. The Settings page can update local runtime values, including API keys, while keeping secret values masked. The System page can now import a JSON export and uses one pause or resume toggle for the bot. Imported records remain owned by the configured local owner.
+Dashboard pages include
 
-Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
+- Dashboard overview with counts and quick links
+- Health checks for the database, Telegram, and OpenAI configuration
+- Memories with create, edit, delete, restore, confirm, and note controls
+- Context editor for owner-editable static conversation guidance
+- A high-level explanation of how dynamic context is assembled
+- Conversations with summaries and recent messages
+- Planning for places, saved ideas, events, and reminders
+- Retrieval inspection with query details, memory text, score components, notes, and source IDs
+- Full API request and response inspection with highlighted, scrollable JSON and copy buttons
+- Settings for local runtime values, models, identity, timezone, and credentials
+- System controls for pause or resume, backups, JSON export, JSON import, and safe updates
 
-Phase 5 adds planning at `http://127.0.0.1:8080/planning`. It stores places, saved ideas, events, and one-time reminders. The reminder worker sends due reminders to the owner through Telegram when the bot is configured. It does not search the web or discover restaurants automatically.
+## Privacy and safety
 
-When a Telegram memory card is deleted, it first changes to a deleted message. The next owner message removes that old card from the chat.
+Wingman is local-first and intended for one trusted owner. The web dashboard binds to `127.0.0.1` and has no password because it is not intended to be exposed publicly. Telegram access uses a numeric owner ID.
 
-## Next update roadmap
+The SQLite database, conversation history, memories, logs, API snapshots, and backups can contain private relationship information. Keep the project directory and data directory private. API keys and Telegram tokens are stored in the local plaintext `.env` file when configured through the dashboard. They are masked in the dashboard and must never be committed to Git.
 
-The next update focuses on reliability, evaluation, and release hardening. Natural conversation remains a release requirement, and dashboard diagnostics should stay available without making the chat feel technical.
+The application controls authorization, memory ownership, tool schemas, safety rules, and confirmation behavior in code. The editable prompt changes conversation style only. It cannot override those application rules.
 
-Natural conversation is a release requirement. Wingman should ask focused questions, use the owner's name and time context naturally, compare new observations with existing memories, and avoid exposing retrieval or tool mechanics in Telegram.
+OpenAI receives the conversation content required to generate replies and embeddings according to the configured API use. Do not use Wingman for medical, legal, financial, or other high-stakes decisions.
 
 ## Requirements
 
-- Linux with Python 3.12
+- Python 3.12 or newer
 - A Telegram bot token from BotFather
 - The numeric Telegram user ID of the owner
-- An OpenAI API key for conversation replies
+- An OpenAI API key
 
 ## Install
 
 ```bash
-git clone <repository>
+git clone https://github.com/HalflingWizard/wingman.git
 cd wingman
 ./scripts/install.sh
 source .venv/bin/activate
+cp .env.example .env
+```
+
+Edit `.env` with the Telegram and OpenAI values, then check the installation
+
+```bash
 wingman doctor
 wingman start
 ```
 
-The dashboard normally starts at `http://127.0.0.1:8080/`. If that port is busy, Wingman tries the next 19 ports and prints and opens the selected address. The health page is available at `/health`. PostgreSQL and Docker are not required.
+The dashboard opens at the selected local address. Use `wingman start --no-browser` to keep it from opening a browser.
 
-Copy `.env.example` to `.env` and fill in the Telegram and OpenAI values. Find a Telegram user ID with a trusted Telegram ID bot, then check that the value is numeric before saving it.
+## Configuration
+
+The main configuration values are in `.env`
+
+```dotenv
+WINGMAN_TELEGRAM_BOT_TOKEN=
+WINGMAN_TELEGRAM_OWNER_ID=
+WINGMAN_OPENAI_API_KEY=
+WINGMAN_OPENAI_MAIN_MODEL=gpt-5-nano
+WINGMAN_OPENAI_SUMMARY_MODEL=gpt-5-nano
+WINGMAN_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+WINGMAN_USER_NAME=Matt
+WINGMAN_PRIMARY_PERSON_NAME=Chloe
+WINGMAN_TIMEZONE=UTC
+WINGMAN_PROMPT_FILE=prompts/wingman.md
+```
+
+The Context page edits the prompt file without changing protected application rules. The Settings page can update selected values while keeping secret values masked. Restart the application after changing Telegram credentials if the running polling process does not pick up the change.
 
 ## Commands
 
@@ -66,17 +108,33 @@ wingman update
 wingman doctor
 ```
 
-`update` performs a safe fast-forward update only when the Git worktree is clean. The system page also provides backup, export, pause, resume, and update actions.
+`wingman update` performs a safe fast-forward update only when the Git worktree is clean. The System page provides the same update action, together with database backups, export, import, and bot pause or resume.
 
-## Data and tests
+## Data and backups
 
-The default SQLite database is `wingman.db` in the current directory. Override it with `WINGMAN_DATABASE_URL`. Run checks with
+The default database is `wingman.db` in the current directory. Set `WINGMAN_DATABASE_URL` to use another SQLite location. The System page can export user data as versioned JSON and import that JSON later. Database backups are stored under `WINGMAN_DATA_DIR/backups` with restrictive file permissions.
+
+## Development
+
+Run the checks from the project root
 
 ```bash
-ruff check .
-ruff format --check .
-mypy wingman
-pytest
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+.venv/bin/mypy wingman
+.venv/bin/pytest
 ```
 
-Export, import, and backups are available in the system page. Encrypted secrets, login rate limiting, and retention controls are still planned. Settings are written to the local plaintext `.env` file, so the dashboard must remain local-only. See `SECURITY.md` for limitations.
+The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLite, and the OpenAI Responses API. It keeps the dashboard server-rendered and avoids a separate frontend build system.
+
+## Documentation
+
+- [Build specification](BUILD_SPEC.md)
+- [Architecture](ARCHITECTURE.md)
+- [Security notes](SECURITY.md)
+- [Implementation history](IMPLEMENTATION_PLAN.md)
+- [Version 2.0.0 release notes](RELEASE_NOTES_v2.0.0.md)
+
+## License
+
+This repository does not currently declare an open-source license. Add a license before distributing it as an open-source project.

@@ -1,66 +1,60 @@
 # Architecture
 
-Wingman is a small Python monolith. FastAPI serves the local web interface, aiogram owns the Telegram polling loop, SQLAlchemy persists data, and the OpenAI Responses API supplies conversation replies.
+Wingman 2.0.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
-The current application version is `1.0.0`. It represents the first stable baseline after Phases 1 through 6.
+The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
-## Phase 1 request lifecycle
+## Request lifecycle
 
-1. Telegram receives a text message.
+1. Telegram receives a message.
 2. The handler checks the numeric Telegram user ID against the configured owner ID.
-3. An authorized message is stored in the database.
-4. Recent conversation messages are loaded.
-5. The model client sends a compact system prompt and recent messages to OpenAI.
-6. The assistant response is stored and sent back to Telegram.
+3. The authorized message is stored in SQLite.
+4. The conversation, summary, pending state, and relevant memories are loaded.
+5. The context builder creates separate static instructions, dynamic context, and recent message history.
+6. The OpenAI Responses API receives the request and may request a validated memory action.
+7. The application validates and executes allowed tool calls, records them, and continues the bounded tool loop.
+8. The assistant response is stored and sent to Telegram.
 
-The web health route reads configuration and database status without exposing secrets.
+The web dashboard reads the same local state and exposes controls for memories, context, planning, diagnostics, settings, backups, import, export, and bot lifecycle.
 
-Phase 2 adds a memory service with ownership checks and allowed field validation. Memory changes are recorded as tool executions when they come through the model action interface. Telegram cards store their chat and message identifiers. Delete and confirm callbacks check ownership before changing a memory, and repeated callbacks are safe because the resulting state is durable.
+## Context model
 
-## Context and data boundaries
+Static context contains owner-editable conversation guidance from `prompts/wingman.md`, followed by application-controlled safety, privacy, memory, identity, and time rules. The editable guidance controls style only and cannot override application policy.
 
-Phase 1 uses recent raw messages only. Memory, retrieval, summaries, tool validation, and agent inspection are added in later phases. The model never receives API keys or Telegram tokens.
+Dynamic context is built for each message. It can contain relevant saved memories, memory notes and source references, recent messages, rolling conversation summaries, pending memory proposals, and relevant planning records. The builder keeps the result within the configured context budget.
 
-Phase 2 stores memories and agent run records. Retrieval and structured model actions will use these records in Phase 3.
+Recent messages remain separate from dynamic context. The current user message appears once in the API request. The API-call inspector stores these layers so the owner can understand what the model received.
 
-Phase 3 adds one concise embedding per memory. SQLite stores vectors as JSON for local simplicity. Retrieval combines lexical overlap and semantic similarity when an embedding is available, then applies deterministic importance, confidence, and recency weights. Retrieval candidates and score components are stored for inspection.
+## Memory and retrieval
 
-Phase 4 keeps recent raw messages within configurable limits and rolls older messages into a durable summary. The summary stores the last message it covered, so the same messages are not summarized repeatedly. Pending state is separate from permanent memory and expires automatically. Each model call stores a structured request snapshot with system prompt, user prompt, added context, recent messages, and estimated tokens.
+Memories belong to the configured owner and support types, statuses, confidence, importance, soft deletion, notes, and Telegram card references. Memory notes preserve evidence, context, and source message IDs without requiring duplicate memory records.
 
-The actual Responses API request has three clear layers. Static profile, safety, and time instructions go through `instructions`. Dynamic memory, summary, and pending-state context goes through a separate developer message. Recent user and assistant messages are sent as history, with the current user message appearing once. The API-call page shows these same layers in the stored request snapshot.
+Retrieval combines normalized lexical matching with semantic similarity when an embedding is available. Deterministic importance, confidence, and recency weighting produces ranked candidates. Query data, candidate text, score components, notes, and source IDs are recorded in retrieval logs for dashboard inspection.
 
-Phase 5 stores planning entities in relational tables. The context builder includes a small upcoming window of saved places, unused ideas, planned events, and active reminders. A simple reminder worker polls one-time reminders and sends due items through Telegram, then marks successful delivery. No external discovery or autonomous browsing is used.
+Uncertain personal observations can become pending proposals. The owner can accept or dismiss a proposal. Memory tools are application-controlled, ownership-checked, schema-validated, audited, and bounded by the model loop.
 
-## Post-1.0 direction
+## Planning
 
-The post-1.0 implementation adds a controlled model tool loop. The model may request a memory search or a memory change, but the application validates every request, checks ownership, performs the transaction, records the tool execution, and returns a limited result. The model never receives direct database access. The loop is bounded so a response cannot make unlimited tool calls.
+Places, saved ideas, events, and one-time reminders use relational tables. Upcoming planning records can contribute to dynamic context. A small reminder worker sends due reminders through Telegram and records delivery state.
 
-The default conversation and summary model is `gpt-5-nano`. Main responses use low reasoning effort, low verbosity, sequential function calls, `store=false`, and encrypted reasoning content for stateless follow-up requests. The API-call inspector stores the complete request configuration and tool definitions without API credentials.
+The model currently does not create places or events directly. Planning changes remain explicit application or dashboard actions until a safe conversational planning tool policy is designed.
 
-Memory retrieval and memory actions are separate concerns. Search is read-only and can be used when the initial context is insufficient. Memory creation, confirmation, updates, and note changes require stronger application rules. Uncertain preferences should be proposed conversationally and confirmed by Matt before becoming confirmed memories.
+## Dashboard
 
-Memories will gain stronger provenance. A useful memory should be connected to the message, conversation, event, date, or observation that supports it. Notes should preserve additional evidence instead of creating duplicate memories. The assistant should use that structure to ask natural follow-up questions and compare new observations with existing context.
+The dashboard is server-rendered by FastAPI. A shared responsive layout provides navigation, Font Awesome icons, summary cards, status badges, forms, and mobile spacing. Long prompts, request payloads, responses, and retrieval JSON use fixed-height, scrollable, highlighted panels with copy buttons.
 
-Phase 8 begins this provenance flow. A personal observation can become a pending memory proposal instead of an immediate write. The proposal expires, can be dismissed, and is completed only after a clear owner confirmation. Model-created memories receive a source note linked to the current message, and visible Telegram cards keep the owner aware of the saved result.
+The Context page edits static guidance and explains dynamic context at a high level. The Settings page persists selected runtime settings in the local `.env` file. The System page controls bot pause or resume, database backups, versioned JSON export and import, and safe Git updates.
 
-Phase 9 separates editable conversation style from application policy. The owner can change `prompts/wingman.md`, while safety, privacy, memory validation, and tool rules remain in code. Retrieved memories carry their notes and source message IDs into dynamic context. The API response snapshot includes a simple word-overlap check showing which retrieved memory statements were mentioned in the answer.
+## Persistence and portability
 
-The dashboard is a shared visual workspace. It uses a small responsive style system, Font Awesome icons with accessible labels, readable memory records, useful status summaries, and diagnostic details. Raw JSON and prompt content remain available in fixed-height, scrollable, copyable inspection panels. The interface stays server-rendered so the local app has no frontend build step.
+SQLite is the default database. IDs are UUID strings. Export files use a version field and include conversations, messages, summaries, memories, notes, places, ideas, events, and reminders. Import preserves record IDs where possible, updates existing records, and forces imported ownership to the current local user.
 
-The Context page separates owner-editable conversation guidance from application-controlled safety and tool rules. It also explains the dynamic context sources without exposing retrieval internals to the model. The Settings page can persist selected runtime values in the local `.env` file. API keys are accepted for local convenience but remain plaintext on disk and masked in the interface.
-
-JSON export and import use versioned user data. Imports preserve record IDs where possible, update existing records, and force ownership fields to the currently configured owner so an export cannot introduce another owner through the web form.
+Database backups are copied to the configured data directory with mode `0600`. JSON exports intentionally exclude embeddings and secrets.
 
 ## Process lifecycle
 
-The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. The dashboard can pause or resume Telegram message processing without stopping the web server. Full independent process control remains future work.
-
-## Data model
-
-The initial database has users, conversations, and messages. IDs are UUID strings. Messages retain the Telegram message ID when available. Domain records will be added with foreign keys and soft deletion as their features are implemented.
+`wingman start` runs the web server and Telegram polling in one asyncio process. The dashboard can pause or resume message processing without stopping the web server. The CLI provides start, stop, restart, status, doctor, and safe update commands. The web server tries nearby ports when the configured port is busy.
 
 ## Security boundary
 
-The web server is local-only by default and the dashboard is intentionally unauthenticated. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables and are redacted from health and settings pages. Encrypted secret storage remains future work.
-
-Deleted Telegram cards use a two-step lifecycle. The callback immediately soft-deletes the memory and edits the card to show the deleted state. Before the next authorized text message is processed, the bot deletes those tombstones and marks their card records as cleaned. Telegram deletion failures leave the tombstone pending for a later retry.
+The dashboard binds to `127.0.0.1` by default and is intentionally unauthenticated. Telegram authorization uses a numeric owner ID. API keys and Telegram tokens are masked in the dashboard but are stored as plaintext environment values when configured locally. Do not expose the dashboard publicly or commit `.env`, database files, logs, exports, or backups.

@@ -1,21 +1,37 @@
 # Security
 
-Wingman stores private relationship information. Run it on a trusted Linux machine and keep the data directory private.
+These notes apply to Wingman 2.0.0.
 
-These security notes describe version `1.0.0`.
+Wingman stores private relationship information. Run it on a trusted machine and protect the project directory, database, logs, exports, backups, and `.env` file.
 
-The web server binds to `127.0.0.1` by default and accepts Telegram messages only from the configured numeric owner ID. Telegram usernames are not used for authorization.
+## Local boundary
 
-The web dashboard is intentionally local-only and does not require a password. Do not bind it to a public interface or expose it through a reverse proxy without adding authentication.
+The web server binds to `127.0.0.1` by default and the dashboard does not require a password. This is intentional for a single-user local application. Do not bind it to a public interface, expose it through a reverse proxy, or forward the port without adding authentication and transport protection.
 
-API keys and Telegram tokens are read from environment variables. The settings page only reports whether they are configured and never returns their values. Do not commit `.env` files, API keys, bot tokens, or database files. Encrypted secret storage remains future work.
+Telegram access is limited to the configured numeric owner ID. Telegram usernames are not used for authorization.
 
-JSON exports exclude embeddings and secrets. Database backups are written under the configured data directory with mode `0600`. Protect this directory and manually copy backups to a separate secure location.
+## Secrets
 
-This project is not designed for medical, legal, financial, or highly sensitive secrets. OpenAI API use sends conversation content to OpenAI according to the account and API settings in use.
+Telegram tokens and OpenAI API keys are read from environment values. The Settings page can update them for local convenience, but the values are written to the plaintext `.env` file. The dashboard masks them and API request snapshots do not include them.
 
-Future model tools must remain application-controlled. Memory search should be read-only, and memory writes must use validated schemas, owner checks, transactions, audit records, and clear confirmation behavior for uncertain facts.
+Do not commit `.env`, API keys, Telegram tokens, database files, logs, JSON exports, or backups. Use file permissions that limit access to the local owner.
 
-Reasoning content is requested in encrypted form for stateless follow-up requests. It is stored only in the OpenAI request flow and is not exposed as readable chain-of-thought in the dashboard.
+## Data handling
 
-The editable prompt file controls conversation style only. It must not be treated as a security boundary. Application code remains responsible for authorization, memory ownership, tool validation, and safety rules.
+Conversation content, memories, notes, planning records, prompts, retrieval logs, and API snapshots may contain sensitive relationship information. JSON exports exclude embeddings and secrets, but they still contain private user data. Store exports and backups securely.
+
+JSON import accepts versioned application exports and forces imported records to the current owner. Do not import untrusted files into a live database without reviewing them first.
+
+## Model and tool safety
+
+The editable prompt controls style only. Application code remains responsible for authorization, memory ownership, safety guidance, tool schemas, validation, transactions, and audit records.
+
+Memory search is read-only. Memory writes are validated and audited. Uncertain personal observations use a confirmation proposal flow. The model does not currently have direct tools for creating places or events.
+
+OpenAI receives the conversation content required for replies and embeddings according to the configured API use. Do not use Wingman for medical, legal, financial, or other high-stakes decisions.
+
+Reasoning content is requested in encrypted form for stateless follow-up requests. It is not exposed as readable chain-of-thought in the dashboard.
+
+## Reporting concerns
+
+If you find a security problem, do not publish private data in an issue. Contact the repository owner through a private channel and include a minimal reproduction.

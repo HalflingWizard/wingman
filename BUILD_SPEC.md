@@ -1,5 +1,9 @@
 # Build a local Telegram wingman agent with a web administration interface
 
+The completed application is Wingman 2.0.0. This document describes the product requirements that define the implementation.
+
+The current implementation also includes controlled model memory tools, memory proposals, source-linked notes, rolling conversation summaries, retrieval inspection, a responsive dashboard, editable context guidance, local settings editing, JSON import and export, backups, lifecycle controls, port fallback, and release diagnostics. The model does not directly create places or events.
+
 You are building a complete but intentionally small self-hosted application.
 
 The application is a private relationship wingman. A user talks to it through Telegram about someone they like. It remembers useful information, keeps track of places, dates, preferences, observations, ideas, and important events. It later uses that knowledge to provide thoughtful advice and suggestions.
@@ -1644,8 +1648,8 @@ The architecture document must explain
 Provide a documented path such as
 
 ```bash
-git clone <repository>
-cd <repository>
+git clone https://github.com/HalflingWizard/wingman.git
+cd wingman
 ./scripts/install.sh
 wingman start
 ```
