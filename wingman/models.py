@@ -205,6 +205,20 @@ class TelegramCard(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class TelegramPlanningCard(Base):
+    __tablename__ = "telegram_planning_cards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    entity_type: Mapped[str] = mapped_column(String(20), index=True)
+    entity_id: Mapped[str] = mapped_column(String(36), index=True)
+    telegram_chat_id: Mapped[int]
+    telegram_message_id: Mapped[int]
+    status: Mapped[str] = mapped_column(String(20), default="synced")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class AgentRun(Base):
     __tablename__ = "agent_runs"
 

@@ -165,13 +165,24 @@ Delivered in Phase 2.3
 
 ### Phase 2.4
 
-Structured memory editing and cross-entity updates
+Natural planning capture, cards, and cross-entity updates
 
-- Improve memory search for requests such as adding an address or correcting an earlier detail.
-- Support field-level updates and note additions without replacing unrelated memory content.
-- Let the assistant find the likely existing memory, explain the proposed change naturally, and ask for clarification if more than one record matches.
-- Keep ownership checks, audit records, source links, and duplicate prevention for every update.
-- Add regression scenarios for coffee shops, addresses, dates, clothing observations, preferences, and corrections.
+Status complete
+
+- Treat clear save intent as enough to save a useful place, idea, event, or reminder.
+- Keep unknown optional fields empty instead of blocking a useful partial record.
+- Keep ownership checks, audit records, source links, and duplicate prevention for every action.
+- Show planning records as Telegram cards with readable details and delete controls.
+- Keep technical parameters and storage metadata out of natural chat replies.
+- Continue supporting field-level memory updates and note additions without replacing unrelated content.
+
+Delivered in Phase 2.4
+
+- Added persistent Telegram cards for places, saved ideas, events, and reminders.
+- Added planning card delete controls with ownership checks and safe status changes.
+- Made clear place-saving intent save directly, including places with unknown location details.
+- Kept technical fields, confidence, importance, and record IDs out of normal assistant replies.
+- Added concise natural save guidance so cards provide details and controls separately from chat.
 
 ### Phase 2.5
 

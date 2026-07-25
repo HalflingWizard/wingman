@@ -36,6 +36,7 @@ def initialize_database(settings: Settings) -> None:
         SavedIdea,
         SummaryUpdate,
         TelegramCard,
+        TelegramPlanningCard,
         ToolExecution,
         User,
     )

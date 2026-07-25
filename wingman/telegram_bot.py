@@ -26,7 +26,7 @@ from wingman.database import session_factory
 from wingman.inbound import InboundAttachment, InboundMessage
 from wingman.lifecycle import is_paused
 from wingman.model_client import AVAILABLE_TOOLS, ModelClient
-from wingman.models import Memory, now_utc
+from wingman.models import Event, Memory, Place, Reminder, SavedIdea, now_utc
 from wingman.prompting import load_prompt
 from wingman.retrieval import (
     log_retrieval,
@@ -38,18 +38,21 @@ from wingman.services import (
     add_message,
     create_agent_run,
     create_memory,
+    delete_planning_record,
     finish_agent_run,
     get_open_pending_state,
     get_or_create_conversation,
     get_or_create_summary,
     get_or_create_user,
     get_owned_memory,
+    get_owned_planning_record,
     mark_card_cleaned,
     mark_card_deleted,
     pending_deleted_cards,
     planning_context,
     save_summary,
     save_telegram_card,
+    save_telegram_planning_card,
     set_memory_embedding,
 )
 from wingman.tools import MemoryToolExecutor
@@ -68,6 +71,47 @@ def memory_card(memory: Memory) -> tuple[str, InlineKeyboardMarkup]:
             InlineKeyboardButton(text="Delete", callback_data=f"memory:delete:{memory.id}")
         )
     return text, InlineKeyboardMarkup(inline_keyboard=[buttons] if buttons else [])
+
+
+def planning_card(
+    entity_type: str, record: Place | SavedIdea | Event | Reminder
+) -> tuple[str, InlineKeyboardMarkup]:
+    icons = {"place": "📍", "idea": "💡", "event": "📅", "reminder": "⏰"}
+    labels = {"place": "Place", "idea": "Idea", "event": "Event", "reminder": "Reminder"}
+    if entity_type == "place":
+        assert isinstance(record, Place)
+        details = [
+            f"Type {record.place_type or 'place'}",
+            f"Location {record.city or record.address or 'unknown'}",
+        ]
+        if record.description:
+            details.append(record.description)
+    elif entity_type == "idea":
+        assert isinstance(record, SavedIdea)
+        details = [record.reason] if record.reason else []
+    elif entity_type == "event":
+        assert isinstance(record, Event)
+        details = [f"When {record.start_at.isoformat()}"]
+        if record.description:
+            details.append(record.description)
+    else:
+        assert isinstance(record, Reminder)
+        details = [f"When {record.scheduled_at.isoformat()}"]
+    title = record.name if isinstance(record, Place) else record.title
+    text = f"{icons[entity_type]} {labels[entity_type]}\n\n{title}"
+    if details:
+        text += "\n\n" + "\n".join(details)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑️ Delete",
+                    callback_data=f"planning:delete:{entity_type}:{record.id}",
+                )
+            ]
+        ]
+    )
+    return text, keyboard
 
 
 async def send_typing(message: TelegramMessage) -> None:
@@ -207,6 +251,34 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 await callback.answer("Memory confirmed")
                 return
         await callback.answer("Nothing changed")
+
+    @router.callback_query(F.data.startswith("planning:"))
+    async def planning_callback(callback: CallbackQuery) -> None:
+        if (
+            callback.from_user.id != settings.telegram_owner_id
+            or callback.message is None
+            or not isinstance(callback.message, TelegramMessage)
+        ):
+            await callback.answer()
+            return
+        parts = (callback.data or "").split(":", 3)
+        if len(parts) != 4 or parts[1] != "delete":
+            await callback.answer("Nothing changed")
+            return
+        _, _, entity_type, entity_id = parts
+        with sessions() as session:
+            user = get_or_create_user(session, callback.from_user.id, settings.user_name)
+            name = delete_planning_record(session, user, entity_type, entity_id)
+        if name is None:
+            await callback.answer("Record not found", show_alert=True)
+            return
+        try:
+            await callback.message.edit_text(
+                f"🗑️ Deleted {entity_type}\n\n{name}", reply_markup=None
+            )
+        except Exception:
+            pass
+        await callback.answer(f"{entity_type.capitalize()} deleted")
 
     @router.message()
     async def chat(message: TelegramMessage) -> None:
@@ -489,6 +561,57 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 memory = get_owned_memory(session, user, memory_id)
                 if memory is not None:
                     save_telegram_card(session, memory, message.chat.id, card.message_id)
+
+        planning_tools = {
+            "create_place": ("place", "place_id"),
+            "create_saved_idea": ("idea", "idea_id"),
+            "create_event": ("event", "event_id"),
+            "create_reminder": ("reminder", "reminder_id"),
+        }
+        published_planning_ids: set[tuple[str, str]] = set()
+        for trace in model_client.last_tool_trace:
+            tool_name = trace.get("name")
+            if not isinstance(tool_name, str):
+                continue
+            tool_info = planning_tools.get(tool_name)
+            if tool_info is None:
+                continue
+            output = trace.get("output", {})
+            if not isinstance(output, dict) or not output.get("ok"):
+                continue
+            result = output.get("result", {})
+            if not isinstance(result, dict):
+                continue
+            entity_type, id_key = tool_info
+            entity_id = result.get(id_key)
+            if not isinstance(entity_id, str):
+                continue
+            identity = (entity_type, entity_id)
+            if identity in published_planning_ids:
+                continue
+            published_planning_ids.add(identity)
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                record = get_owned_planning_record(session, user, entity_type, entity_id)
+                if record is None or record.status in {
+                    "deleted",
+                    "cancelled",
+                }:
+                    continue
+                card_text, keyboard = planning_card(entity_type, record)
+            card = await message.answer(card_text, reply_markup=keyboard)
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                record = get_owned_planning_record(session, user, entity_type, entity_id)
+                if record is not None:
+                    save_telegram_planning_card(
+                        session,
+                        user,
+                        entity_type,
+                        entity_id,
+                        message.chat.id,
+                        card.message_id,
+                    )
 
     dispatcher.include_router(router)
     return dispatcher

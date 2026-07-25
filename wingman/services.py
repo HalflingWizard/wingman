@@ -21,6 +21,7 @@ from wingman.models import (
     SavedIdea,
     SummaryUpdate,
     TelegramCard,
+    TelegramPlanningCard,
     ToolExecution,
     User,
 )
@@ -722,3 +723,94 @@ def mark_card_cleaned(session: Session, card_id: str) -> None:
         card.status = "cleaned"
         card.updated_at = datetime.now(UTC)
         session.commit()
+
+
+def save_telegram_planning_card(
+    session: Session,
+    user: User,
+    entity_type: str,
+    entity_id: str,
+    chat_id: int,
+    message_id: int,
+) -> TelegramPlanningCard:
+    card = session.scalar(
+        select(TelegramPlanningCard).where(
+            TelegramPlanningCard.user_id == user.id,
+            TelegramPlanningCard.entity_type == entity_type,
+            TelegramPlanningCard.entity_id == entity_id,
+        )
+    )
+    if card is None:
+        card = TelegramPlanningCard(
+            user_id=user.id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            telegram_chat_id=chat_id,
+            telegram_message_id=message_id,
+        )
+        session.add(card)
+    else:
+        card.telegram_chat_id = chat_id
+        card.telegram_message_id = message_id
+        card.status = "synced"
+        card.updated_at = datetime.now(UTC)
+    session.commit()
+    return card
+
+
+def delete_planning_record(
+    session: Session, user: User, entity_type: str, entity_id: str
+) -> str | None:
+    record: Place | SavedIdea | Event | Reminder | None
+    if entity_type == "place":
+        record = session.scalar(
+            select(Place).where(Place.id == entity_id, Place.user_id == user.id)
+        )
+    elif entity_type == "idea":
+        record = session.scalar(
+            select(SavedIdea).where(SavedIdea.id == entity_id, SavedIdea.user_id == user.id)
+        )
+    elif entity_type == "event":
+        record = session.scalar(
+            select(Event).where(Event.id == entity_id, Event.user_id == user.id)
+        )
+    elif entity_type == "reminder":
+        record = session.scalar(
+            select(Reminder).where(Reminder.id == entity_id, Reminder.user_id == user.id)
+        )
+    else:
+        return None
+    if record is None:
+        return None
+    record.status = "deleted" if entity_type in {"place", "idea"} else "cancelled"
+    record.updated_at = datetime.now(UTC)
+    card = session.scalar(
+        select(TelegramPlanningCard).where(
+            TelegramPlanningCard.user_id == user.id,
+            TelegramPlanningCard.entity_type == entity_type,
+            TelegramPlanningCard.entity_id == entity_id,
+        )
+    )
+    if card is not None:
+        card.status = "deleted"
+        card.updated_at = datetime.now(UTC)
+    session.commit()
+    return str(getattr(record, "name", None) or getattr(record, "title", entity_type))
+
+
+def get_owned_planning_record(
+    session: Session, user: User, entity_type: str, entity_id: str
+) -> Place | SavedIdea | Event | Reminder | None:
+    if entity_type == "place":
+        return session.scalar(select(Place).where(Place.id == entity_id, Place.user_id == user.id))
+    if entity_type == "idea":
+        return session.scalar(
+            select(SavedIdea).where(SavedIdea.id == entity_id, SavedIdea.user_id == user.id)
+        )
+    if entity_type == "event":
+        return session.scalar(select(Event).where(Event.id == entity_id, Event.user_id == user.id))
+    if entity_type == "reminder":
+        return session.scalar(
+            select(Reminder).where(Reminder.id == entity_id, Reminder.user_id == user.id)
+        )
+    return None
