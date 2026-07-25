@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 import signal
+import socket
 import threading
 import webbrowser
 from pathlib import Path
@@ -19,6 +20,21 @@ from wingman.telegram_bot import run_bot
 from wingman.web import create_app
 
 PID_FILE = Path(".wingman.pid")
+
+
+def find_available_port(host: str, preferred_port: int, attempts: int = 20) -> int:
+    """Return the preferred port or the next available local port."""
+    for port in range(preferred_port, preferred_port + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind((host, port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(
+        f"No available web port found between {preferred_port} and {preferred_port + attempts - 1}"
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -37,13 +53,14 @@ def start(no_browser: bool) -> None:
     PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
     initialize_database(settings)
     app = create_app()
+    web_port = find_available_port(settings.web_host, settings.web_port)
 
     def web_server() -> None:
-        uvicorn.run(app, host=settings.web_host, port=settings.web_port, log_level="info")
+        uvicorn.run(app, host=settings.web_host, port=web_port, log_level="info")
 
     thread = threading.Thread(target=web_server, daemon=True)
     thread.start()
-    address = f"http://{settings.web_host}:{settings.web_port}/"
+    address = f"http://{settings.web_host}:{web_port}/"
     print(f"Wingman {__version__} is running at {address}")
     if not no_browser:
         webbrowser.open(address)

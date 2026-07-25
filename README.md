@@ -30,7 +30,7 @@ wingman doctor
 wingman start
 ```
 
-The default dashboard address is `http://127.0.0.1:8080/`. The health page is available at `http://127.0.0.1:8080/health`. PostgreSQL and Docker are not required for Phase 1.
+The dashboard normally starts at `http://127.0.0.1:8080/`. If that port is busy, Wingman tries the next 19 ports and prints and opens the selected address. The health page is available at `/health`. PostgreSQL and Docker are not required.
 
 Copy `.env.example` to `.env` and fill in the Telegram and OpenAI values. Find a Telegram user ID with a trusted Telegram ID bot, then check that the value is numeric before saving it.
 
