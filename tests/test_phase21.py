@@ -66,3 +66,18 @@ def test_model_request_allows_multiple_tool_calls():
     assert answer == "Done."
     assert len(executed) == 2
     assert calls[0]["parallel_tool_calls"] is True
+
+
+def test_model_client_transcribes_voice_without_persisting_audio():
+    settings = Settings(openai_api_key="test-key")
+    client = ModelClient(settings)
+
+    class FakeTranscriptions:
+        async def create(self, **kwargs):
+            assert kwargs["model"] == "gpt-4o-mini-transcribe"
+            assert kwargs["file"] == ("voice.ogg", b"audio")
+            return SimpleNamespace(text="A transcribed message")
+
+    client.client = SimpleNamespace(audio=SimpleNamespace(transcriptions=FakeTranscriptions()))
+    transcript = asyncio.run(client.transcribe(b"audio", "voice.ogg", "gpt-4o-mini-transcribe"))
+    assert transcript == "A transcribed message"

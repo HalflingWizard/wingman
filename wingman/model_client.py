@@ -288,3 +288,13 @@ class ModelClient:
     ) -> list[float]:
         response = await self.client.embeddings.create(model=embedding_model, input=text)
         return response.data[0].embedding
+
+    async def transcribe(self, audio: bytes, filename: str, model: str) -> str:
+        response = await self.client.audio.transcriptions.create(
+            model=model,
+            file=(filename, audio),
+        )
+        transcript = getattr(response, "text", "")
+        if not isinstance(transcript, str) or not transcript.strip():
+            raise RuntimeError("The transcription response was empty")
+        return transcript.strip()

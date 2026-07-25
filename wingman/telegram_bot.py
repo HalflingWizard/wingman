@@ -1,10 +1,15 @@
 """Telegram polling and owner authorization."""
 
+import asyncio
 import json
+from collections.abc import Awaitable
+from contextlib import suppress
+from io import BytesIO
 from time import perf_counter
 from typing import Any
 
 from aiogram import Bot, Dispatcher, F, Router
+from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     CallbackQuery,
@@ -18,7 +23,7 @@ from aiogram.types import (
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
-from wingman.inbound import InboundMessage
+from wingman.inbound import InboundAttachment, InboundMessage
 from wingman.lifecycle import is_paused
 from wingman.model_client import MEMORY_TOOLS, ModelClient
 from wingman.models import Memory, now_utc
@@ -63,6 +68,66 @@ def memory_card(memory: Memory) -> tuple[str, InlineKeyboardMarkup]:
             InlineKeyboardButton(text="Delete", callback_data=f"memory:delete:{memory.id}")
         )
     return text, InlineKeyboardMarkup(inline_keyboard=[buttons] if buttons else [])
+
+
+async def send_typing(message: TelegramMessage) -> None:
+    if message.bot is None:
+        return
+    try:
+        await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    except Exception:
+        pass
+
+
+async def with_typing[T](message: TelegramMessage, operation: Awaitable[T]) -> T:
+    async def refresh() -> None:
+        while True:
+            await send_typing(message)
+            await asyncio.sleep(4)
+
+    task = asyncio.create_task(refresh())
+    try:
+        return await operation
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+async def transcribe_voice(
+    message: TelegramMessage, model_client: ModelClient, settings: Settings
+) -> InboundMessage:
+    if message.voice is None or message.bot is None:
+        raise ValueError("Voice message is not available")
+    if message.voice.file_size and message.voice.file_size > settings.voice_max_bytes:
+        raise ValueError("Voice message is too large")
+    remote_file = await message.bot.get_file(message.voice.file_id)
+    if not remote_file.file_path:
+        raise RuntimeError("Telegram did not provide a voice file path")
+    buffer = BytesIO()
+    try:
+        await message.bot.download_file(remote_file.file_path, destination=buffer)
+        audio = buffer.getvalue()
+        if len(audio) > settings.voice_max_bytes:
+            raise ValueError("Voice message is too large")
+        transcript = await model_client.transcribe(
+            audio, "wingman-voice.ogg", settings.openai_transcription_model
+        )
+    finally:
+        buffer.close()
+        audio = b""
+    attachment = InboundAttachment(
+        source_type="telegram_voice",
+        provider_file_id=message.voice.file_id,
+        filename="wingman-voice.ogg",
+        content_type="audio/ogg",
+    )
+    return InboundMessage(
+        text=transcript,
+        source_type="telegram_voice",
+        provider_message_id=message.message_id,
+        attachments=(attachment,),
+    )
 
 
 def build_dispatcher(settings: Settings) -> Dispatcher:
@@ -147,20 +212,34 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     async def chat(message: TelegramMessage) -> None:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
-        if not message.text:
+        if not message.text and message.voice is None:
             await message.answer(
                 "I can process text messages right now. Voice messages and other media support "
                 "will be added soon."
             )
             return
-        inbound = InboundMessage(
-            text=message.text,
-            source_type="telegram_text",
-            provider_message_id=message.message_id,
-        )
         owner_id = message.from_user.id
         if is_paused(settings):
             await message.answer("I am paused for now. I will be back soon.")
+            return
+        if model_client is None and message.voice is not None:
+            await message.answer("I need an OpenAI API key to transcribe voice messages.")
+            return
+        try:
+            if message.voice is not None:
+                assert model_client is not None
+                inbound = await with_typing(
+                    message, transcribe_voice(message, model_client, settings)
+                )
+            else:
+                inbound = InboundMessage(
+                    text=message.text or "",
+                    source_type="telegram_text",
+                    provider_message_id=message.message_id,
+                )
+            await send_typing(message)
+        except (RuntimeError, ValueError) as exc:
+            await message.answer(f"I could not process that voice message. {exc}")
             return
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)
@@ -178,8 +257,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         query_vector = None
         if model_client is not None:
             try:
-                query_vector = await model_client.embed(
-                    inbound.text, settings.openai_embedding_model
+                query_vector = await with_typing(
+                    message, model_client.embed(inbound.text, settings.openai_embedding_model)
                 )
             except Exception:
                 pass
@@ -227,9 +306,12 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     summary_request,
                 )
             try:
-                new_summary = await model_client.summarize(
-                    existing_summary,
-                    [(item.sender, item.text) for item in old_messages],
+                new_summary = await with_typing(
+                    message,
+                    model_client.summarize(
+                        existing_summary,
+                        [(item.sender, item.text) for item in old_messages],
+                    ),
                 )
                 with sessions() as session:
                     user = get_or_create_user(session, message.from_user.id)
@@ -318,13 +400,16 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 return executor.execute(name, arguments)
 
         try:
-            answer = await model_client.reply(
-                history,
-                settings.user_name,
-                settings.primary_person_name,
-                built_context.static_context,
-                built_context.dynamic_context,
-                tool_executor=execute_model_tool,
+            answer = await with_typing(
+                message,
+                model_client.reply(
+                    history,
+                    settings.user_name,
+                    settings.primary_person_name,
+                    built_context.static_context,
+                    built_context.dynamic_context,
+                    tool_executor=execute_model_tool,
+                ),
             )
         except Exception as exc:
             with sessions() as session:

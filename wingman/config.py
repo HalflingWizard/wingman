@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     openai_main_model: str = "gpt-5-nano"
     openai_summary_model: str = "gpt-5-nano"
     openai_embedding_model: str = "text-embedding-3-small"
+    openai_transcription_model: str = "gpt-4o-mini-transcribe"
+    voice_max_bytes: int = Field(default=25_000_000, ge=1_000_000, le=25_000_000)
     summary_threshold: int = Field(default=40, ge=10, le=500)
     recent_message_limit: int = Field(default=20, ge=5, le=100)
     context_token_budget: int = Field(default=4000, ge=500, le=16000)

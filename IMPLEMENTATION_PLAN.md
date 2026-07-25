@@ -119,6 +119,8 @@ Delivered in Phase 2.1
 
 Telegram responsiveness and voice transcription
 
+Status complete
+
 - Show Telegram typing status as soon as an authorized message begins processing.
 - Refresh the typing action while a slow model or transcription request is running, then stop naturally when the response is sent.
 - Download Telegram voice messages through the bot API and send the audio to a configurable OpenAI transcription service.
@@ -126,6 +128,15 @@ Telegram responsiveness and voice transcription
 - Store the original voice source, transcript, and timestamps so the conversation and diagnostics remain traceable.
 - Add mocked transcription tests, failure handling, size limits, timeout handling, and a user-facing transcription error.
 - Keep an attachment collection in the normalized message path so later support can include multiple images or files without redesigning the conversation model.
+
+Delivered in Phase 2.2
+
+- Added Telegram typing status refreshes while transcription, embedding, summarization, and response operations are running.
+- Added Telegram voice download and OpenAI Audio Transcriptions integration using `gpt-4o-mini-transcribe` by default.
+- Kept voice audio in memory only and released the buffer immediately after transcription or failure.
+- Added voice size limits, empty-transcript handling, and clear user-facing errors.
+- Passed the transcript through the existing memory, retrieval, context, tool, and response flow.
+- Added mocked transcription coverage.
 
 ### Phase 2.3
 

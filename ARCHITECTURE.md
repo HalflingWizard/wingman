@@ -9,11 +9,12 @@ The application is designed for one trusted owner on one machine. It favors clea
 1. Telegram receives a message.
 2. The handler checks the numeric Telegram user ID against the configured owner ID.
 3. The authorized message is stored in SQLite.
-4. The conversation, summary, pending state, and relevant memories are loaded.
-5. The context builder creates separate static instructions, dynamic context, and recent message history.
-6. The OpenAI Responses API receives the request and may request a validated memory action.
-7. The application validates and executes allowed tool calls, records them, and continues the bounded tool loop.
-8. The assistant response is stored and sent to Telegram.
+4. Text is normalized directly, while voice audio is downloaded into memory and transcribed.
+5. The conversation, summary, pending state, and relevant memories are loaded.
+6. The context builder creates separate static instructions, dynamic context, and recent message history.
+7. The OpenAI Responses API receives the request and may request multiple validated memory actions.
+8. The application validates and executes allowed tool calls, records them, and continues the bounded tool loop.
+9. The assistant response is stored and sent to Telegram.
 
 The web dashboard reads the same local state and exposes controls for memories, context, planning, diagnostics, settings, backups, import, export, and bot lifecycle.
 
@@ -44,6 +45,8 @@ The model currently does not create places or events directly. Planning changes 
 The dashboard is server-rendered by FastAPI. A shared responsive layout provides navigation, Font Awesome icons, summary cards, status badges, forms, and mobile spacing. Long prompts, request payloads, responses, and retrieval JSON use fixed-height, scrollable, highlighted panels with copy buttons.
 
 The Context page edits static guidance and explains dynamic context at a high level. The Settings page persists selected runtime settings in the local `.env` file. The System page controls bot pause or resume, database backups, versioned JSON export and import, and safe Git updates.
+
+Telegram voice messages are downloaded into memory, sent to the configured Audio Transcriptions model, and then released. Audio is not written to the database or retained as a project file. Photos, videos, and documents remain unsupported.
 
 ## Persistence and portability
 
