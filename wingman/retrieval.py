@@ -117,6 +117,8 @@ def log_retrieval(
     candidates = [
         {
             "memory_id": result.memory.id,
+            "memory_text": result.memory.statement,
+            "embedding_available": bool(result.memory.embedding_json),
             "score": result.score,
             "semantic_similarity": result.semantic_similarity,
             "keyword_match": result.keyword_match,

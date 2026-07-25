@@ -31,7 +31,7 @@ Phase 5 stores planning entities in relational tables. The context builder inclu
 
 ## Process lifecycle
 
-The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. A later phase will add dashboard lifecycle controls.
+The `wingman start` command runs the web server and Telegram polling in one asyncio process. The command stays in the foreground by default. Stop and restart use a small PID file and signals. The dashboard can pause or resume Telegram message processing without stopping the web server. Full independent process control remains future work.
 
 ## Data model
 
@@ -39,6 +39,6 @@ The initial database has users, conversations, and messages. IDs are UUID string
 
 ## Security boundary
 
-The web server is local-only by default. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables in Phase 1 and are redacted from health output. Password sessions, encrypted secret storage, CSRF protection, rate limiting, and first-run setup are Phase 6 work.
+The web server is local-only by default. Telegram authorization uses a numeric owner ID, never a username. Secrets come from environment variables and are redacted from health and settings pages. The production web app uses a local password hash, session cookies, and CSRF protection. Encrypted secret storage and login rate limiting remain future work.
 
 Deleted Telegram cards use a two-step lifecycle. The callback immediately soft-deletes the memory and edits the card to show the deleted state. Before the next authorized text message is processed, the bot deletes those tombstones and marks their card records as cleaned. Telegram deletion failures leave the tombstone pending for a later retry.

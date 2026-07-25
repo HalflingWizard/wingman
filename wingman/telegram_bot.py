@@ -17,6 +17,7 @@ from aiogram.types import (
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
+from wingman.lifecycle import is_paused
 from wingman.model_client import ModelClient
 from wingman.models import Memory, now_utc
 from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
@@ -138,6 +139,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
         if not message.text:
+            return
+        if is_paused(settings):
+            await message.answer("I am paused for now. I will be back soon.")
             return
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, message.from_user.full_name)

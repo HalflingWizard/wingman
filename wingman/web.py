@@ -1,17 +1,22 @@
 """FastAPI application."""
 
+import hmac
 import json
 from datetime import UTC, datetime
 from html import escape
+from typing import Any, cast
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from wingman import __version__
+from wingman.auth import AuthStore, new_session
 from wingman.config import Settings, get_settings
 from wingman.database import make_engine, session_factory
+from wingman.lifecycle import is_paused, set_paused
 from wingman.models import AgentRun, Conversation, ConversationSummary, User
 from wingman.services import (
     add_memory_note,
@@ -32,11 +37,101 @@ from wingman.services import (
     update_memory,
     update_memory_note,
 )
+from wingman.system import backup_database, export_user_data, safe_update
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title="Wingman", version=__version__)
+    auth_enabled = settings is None
+    auth_store = AuthStore(active_settings.auth_file)
+    sessions: dict[str, str] = {}
+    app.state.sessions = sessions
+
+    @app.middleware("http")
+    async def authentication(request: Request, call_next: Any) -> Response:
+        if not auth_enabled:
+            return cast(Response, await call_next(request))
+        public = {"/login", "/setup", "/health"}
+        session_id = request.cookies.get("wingman_session")
+        csrf_token = sessions.get(session_id or "")
+        if request.url.path not in public and csrf_token is None:
+            return RedirectResponse("/login", status_code=303)
+        if request.method == "POST" and request.url.path not in {"/login", "/setup"}:
+            body = await request.body()
+            request._body = body
+            submitted = parse_qs(body.decode()).get("csrf_token", [""])[0]
+            if csrf_token is None or not hmac.compare_digest(submitted, csrf_token):
+                return Response("CSRF validation failed", status_code=403)
+        response = await call_next(request)
+        if "text/html" in response.headers.get("content-type", ""):
+            body = b"".join([chunk async for chunk in response.body_iterator])
+            if csrf_token:
+                marker = b"<form method='post'"
+                hidden = (
+                    b"<input type='hidden' name='csrf_token' value='" + csrf_token.encode() + b"'>"
+                )
+                body = body.replace(marker, marker + hidden)
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type="text/html",
+            )
+        return cast(Response, response)
+
+    @app.get("/setup", response_class=HTMLResponse)
+    def setup_page() -> str:
+        if auth_store.configured:
+            return "<html><body><a href='/login'>Log in</a></body></html>"
+        return (
+            "<html><body><h1>Wingman first-run setup</h1>"
+            "<form method='post'><input type='password' name='password' "
+            "placeholder='Administrator password' required><button>Create password</button></form>"
+            "<p>Use at least 12 characters. Keep this local application private.</p></body></html>"
+        )
+
+    @app.post("/setup", response_class=HTMLResponse)
+    def setup(password: str = Form(...)) -> Response:
+        if auth_store.configured:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            auth_store.set_password(password)
+        except ValueError as exc:
+            return HTMLResponse(f"<p>{escape(str(exc))}</p><a href='/setup'>Try again</a>", 400)
+        return RedirectResponse("/login", status_code=303)
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page() -> str:
+        return (
+            "<html><body><h1>Wingman login</h1>"
+            "<form method='post'><input type='password' name='password' required>"
+            "<button>Log in</button></form></body></html>"
+        )
+
+    @app.post("/login")
+    def login(password: str = Form(...)) -> Response:
+        if not auth_store.verify(password):
+            return HTMLResponse("<p>Invalid password</p>", 401)
+        session_id, csrf_token = new_session()
+        sessions[session_id] = csrf_token
+        response = RedirectResponse("/", status_code=303)
+        response.set_cookie(
+            "wingman_session",
+            session_id,
+            httponly=True,
+            samesite="lax",
+            secure=active_settings.web_host != "127.0.0.1",
+        )
+        return response
+
+    @app.post("/logout")
+    def logout(request: Request) -> Response:
+        session_id = request.cookies.get("wingman_session")
+        sessions.pop(session_id or "", None)
+        response = RedirectResponse("/login", status_code=303)
+        response.delete_cookie("wingman_session")
+        return response
 
     @app.get("/health", response_class=HTMLResponse)
     def health() -> str:
@@ -57,7 +152,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
             "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
             "<a href='/planning'>Planning</a> | <a href='/api-calls'>API calls</a> | "
-            "<a href='/retrieval'>Retrieval</a></nav>"
+            "<a href='/retrieval'>Retrieval</a> | <a href='/settings'>Settings</a> | "
+            "<a href='/system'>System</a></nav>"
             f"<h1>Wingman {__version__}</h1><p>Database {database}</p>"
             f"<p>Telegram {telegram}</p><p>OpenAI {openai}</p>"
             "</body></html>"
@@ -84,7 +180,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
             "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
             "<a href='/planning'>Planning</a> | <a href='/api-calls'>API calls</a> | "
-            "<a href='/retrieval'>Retrieval</a></nav>"
+            "<a href='/retrieval'>Retrieval</a> | <a href='/settings'>Settings</a> | "
+            "<a href='/system'>System</a></nav>"
         )
 
     @app.get("/", response_class=HTMLResponse)
@@ -239,10 +336,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     .limit(20)
                 )
             )
-        rows = "".join(
-            f"<li>{escape(log.query_text)} <pre>{escape(log.selected_json)}</pre></li>"
-            for log in logs
-        )
+        rows = []
+        for log in logs:
+            query_json = json.dumps(json.loads(log.query_json), indent=2, ensure_ascii=False)
+            candidate_json = json.dumps(
+                json.loads(log.candidates_json), indent=2, ensure_ascii=False
+            )
+            rows.append(
+                "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
+                f"<h2>Query</h2><p>{escape(log.query_text)}</p>"
+                f"<h3>Query details</h3><pre style='max-height:260px;overflow:auto;"
+                f"background:#f6f8fa;padding:1rem;white-space:pre-wrap'>"
+                f"{escape(query_json)}</pre>"
+                f"<h3>Ranked candidates</h3><pre style='max-height:420px;overflow:auto;"
+                f"background:#f6f8fa;padding:1rem;white-space:pre-wrap'>"
+                f"{escape(candidate_json)}</pre></article>"
+            )
         return (
             f"<html><body>{navigation()}<h1>Retrieval inspector</h1><ul>{rows}</ul></body></html>"
         )
@@ -318,6 +427,91 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user = web_user(session)
             create_place(session, user, name, address, city, description)
         return planning()
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_page() -> str:
+        def mask(value: str) -> str:
+            return "configured" if value else "not configured"
+
+        return (
+            "<html><body>"
+            + navigation()
+            + "<h1>Settings</h1>"
+            + f"<p>Telegram token {mask(active_settings.telegram_bot_token)}</p>"
+            + f"<p>OpenAI key {mask(active_settings.openai_api_key)}</p>"
+            + f"<p>Owner ID "
+            f"{escape(str(active_settings.telegram_owner_id or 'not configured'))}</p>"
+            + f"<p>Main model {escape(active_settings.openai_main_model)}</p>"
+            + f"<p>Timezone {escape(active_settings.timezone)}</p>"
+            + "<h2>Change web password</h2><form method='post' action='/settings/password'>"
+            + "<input type='password' name='password' minlength='12' required>"
+            + "<button>Change password</button></form>"
+            + "<p>Secrets remain masked. Environment-based credential changes are "
+            + "documented for now.</p>"
+            + "</body></html>"
+        )
+
+    @app.post("/settings/password", response_class=HTMLResponse)
+    def change_password(password: str = Form(...)) -> str:
+        try:
+            auth_store.set_password(password)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return settings_page()
+
+    @app.get("/system", response_class=HTMLResponse)
+    def system_page() -> str:
+        return (
+            "<html><body>"
+            + navigation()
+            + "<h1>System</h1>"
+            + f"<p>Telegram bot {'paused' if is_paused(active_settings) else 'running'}</p>"
+            + "<form method='post' action='/system/bot/pause'><button>Pause bot</button></form>"
+            + "<form method='post' action='/system/bot/resume'><button>Resume bot</button></form>"
+            + "<a href='/system/export'>Download JSON export</a>"
+            + "<form method='post' action='/system/backup'><button>Backup database</button></form>"
+            + "<form method='post' action='/system/update'><button>Safe Git update</button></form>"
+            + "<form method='post' action='/logout'><button>Log out</button></form>"
+            + "</body></html>"
+        )
+
+    @app.get("/system/export")
+    def export_json() -> Response:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            payload = export_user_data(session, user)
+        response = Response(
+            json.dumps(payload, default=str, indent=2, ensure_ascii=False),
+            media_type="application/json",
+        )
+        response.headers["Content-Disposition"] = "attachment; filename=wingman-export.json"
+        return response
+
+    @app.post("/system/backup", response_class=HTMLResponse)
+    def create_backup() -> str:
+        path = backup_database(active_settings)
+        return (
+            f"<html><body>{navigation()}<p>Backup created at {escape(str(path))}</p></body></html>"
+        )
+
+    @app.post("/system/update", response_class=HTMLResponse)
+    def update_system() -> str:
+        try:
+            branch = safe_update(active_settings)
+            message = f"Update completed on branch {branch}"
+        except Exception as exc:
+            message = f"Update failed {exc}"
+        return f"<html><body>{navigation()}<p>{escape(message)}</p></body></html>"
+
+    @app.post("/system/bot/pause", response_class=HTMLResponse)
+    def pause_bot() -> str:
+        set_paused(active_settings, True)
+        return system_page()
+
+    @app.post("/system/bot/resume", response_class=HTMLResponse)
+    def resume_bot() -> str:
+        set_paused(active_settings, False)
+        return system_page()
 
     @app.post("/planning/ideas", response_class=HTMLResponse)
     def add_idea(title: str = Form(...), reason: str = Form("")) -> str:
