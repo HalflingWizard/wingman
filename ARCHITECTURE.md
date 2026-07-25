@@ -35,6 +35,8 @@ Phase 5 stores planning entities in relational tables. The context builder inclu
 
 The post-1.0 implementation adds a controlled model tool loop. The model may request a memory search or a memory change, but the application validates every request, checks ownership, performs the transaction, records the tool execution, and returns a limited result. The model never receives direct database access. The loop is bounded so a response cannot make unlimited tool calls.
 
+The default conversation and summary model is `gpt-5-nano`. Main responses use low reasoning effort, low verbosity, sequential function calls, `store=false`, and encrypted reasoning content for stateless follow-up requests. The API-call inspector stores the complete request configuration and tool definitions without API credentials.
+
 Memory retrieval and memory actions are separate concerns. Search is read-only and can be used when the initial context is insufficient. Memory creation, confirmation, updates, and note changes require stronger application rules. Uncertain preferences should be proposed conversationally and confirmed by Matt before becoming confirmed memories.
 
 Memories will gain stronger provenance. A useful memory should be connected to the message, conversation, event, date, or observation that supports it. Notes should preserve additional evidence instead of creating duplicate memories. The assistant should use that structure to ask natural follow-up questions and compare new observations with existing context.

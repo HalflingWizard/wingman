@@ -161,6 +161,8 @@ Delivered in Phase 7
 - Added read-only memory search results with memory text, status, confidence, importance, and notes.
 - Kept memory deletion out of model tools. Deletion remains an explicit owner action through cards and the dashboard.
 - Added tool names to request snapshots and tool arguments and results to response snapshots.
+- Switched the default conversation and summary model to `gpt-5-nano` with low reasoning effort, low verbosity, sequential tool calls, and stateless responses.
+- Stored the complete redacted main request snapshot, including model settings and full tool schemas.
 - Added mocked tests for memory search and the Responses API tool loop.
 
 Acceptance examples

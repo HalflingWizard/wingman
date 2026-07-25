@@ -31,7 +31,7 @@ def test_search_memory_tool_returns_owned_text_and_notes(tmp_path):
 
 
 def test_model_client_runs_application_controlled_tool_loop():
-    settings = Settings(openai_api_key="test-key")
+    settings = Settings(openai_api_key="test-key", openai_main_model="gpt-5-nano")
     client = ModelClient(settings)
     calls = []
 
@@ -81,3 +81,11 @@ def test_model_client_runs_application_controlled_tool_loop():
     assert executed == [("search_memories", {"query": "jewelry"})]
     assert "tools" in calls[0]
     assert calls[1]["input"][-1]["type"] == "function_call_output"
+    assert client.last_request_snapshot["model"] == "gpt-5-nano"
+    assert client.last_request_snapshot["reasoning"] == {"effort": "low", "summary": "auto"}
+    assert client.last_request_snapshot["text"] == {"verbosity": "low"}
+    assert client.last_request_snapshot["store"] is False
+    assert client.last_request_snapshot["tools"][0]["parameters"]["required"] == [
+        "query",
+        "top_k",
+    ]

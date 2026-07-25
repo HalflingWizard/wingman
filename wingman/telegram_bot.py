@@ -321,6 +321,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     {"answer": answer, "tool_calls": model_client.last_tool_trace},
                     ensure_ascii=False,
                 ),
+                request_snapshot=json.dumps(model_client.last_request_snapshot, ensure_ascii=False),
                 input_tokens=model_client.last_usage[0],
                 output_tokens=model_client.last_usage[1],
             )

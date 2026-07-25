@@ -14,11 +14,14 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "search_memories",
-        "description": "Search the owner's saved memories and notes.",
+        "description": "Search the owner's saved memories and notes before creating a duplicate.",
         "parameters": {
             "type": "object",
-            "properties": {"query": {"type": "string", "minLength": 1}},
-            "required": ["query"],
+            "properties": {
+                "query": {"type": "string", "minLength": 1},
+                "top_k": {"type": "integer", "minimum": 1, "maximum": 8},
+            },
+            "required": ["query", "top_k"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -116,6 +119,7 @@ class ModelClient:
         self.model = settings.openai_main_model
         self.summary_model = settings.openai_summary_model
         self.last_usage: tuple[int | None, int | None] = (None, None)
+        self.last_request_snapshot: dict[str, Any] = {}
 
     async def reply(
         self,
@@ -158,9 +162,16 @@ class ModelClient:
             "model": self.model,
             "instructions": prompt,
             "input": cast(Any, input_messages),
+            "reasoning": {"effort": "low", "summary": "auto"},
+            "text": {"verbosity": "low"},
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
         }
         if tool_executor is not None:
             request["tools"] = MEMORY_TOOLS
+            request["tool_choice"] = "auto"
+            request["parallel_tool_calls"] = False
+        self.last_request_snapshot = request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:
             for _ in range(4):
@@ -213,6 +224,10 @@ class ModelClient:
                 "temporary details. Do not repeat durable memories unnecessarily."
             ),
             input=f"Existing summary\n{existing_summary}\n\nMessages\n{input_text}",
+            reasoning={"effort": "low", "summary": "auto"},
+            text={"verbosity": "low"},
+            store=False,
+            include=["reasoning.encrypted_content"],
         )
         usage = response.usage
         self.last_usage = (

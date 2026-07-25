@@ -15,3 +15,5 @@ JSON exports exclude embeddings and secrets. Database backups are written under 
 This project is not designed for medical, legal, financial, or highly sensitive secrets. OpenAI API use sends conversation content to OpenAI according to the account and API settings in use.
 
 Future model tools must remain application-controlled. Memory search should be read-only, and memory writes must use validated schemas, owner checks, transactions, audit records, and clear confirmation behavior for uncertain facts.
+
+Reasoning content is requested in encrypted form for stateless follow-up requests. It is stored only in the OpenAI request flow and is not exposed as readable chain-of-thought in the dashboard.

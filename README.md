@@ -10,7 +10,7 @@ The current application version is `1.0.0`. This is the first stable baseline fo
 
 The Phase 1 through Phase 6 implementation is included in version `1.0.0`. It provides configuration, SQLite persistence, the local dashboard, Telegram owner authorization, OpenAI conversation replies, memories, retrieval, planning, API-call inspection, exports, backups, and bot lifecycle controls.
 
-Phase 7 is now implemented on top of the `1.0.0` baseline. The model can request validated memory searches and controlled memory changes. Tool calls are audited and shown in the API-call inspector. Memory deletion remains an explicit owner action.
+Phase 7 is now implemented on top of the `1.0.0` baseline. The default conversation and summary model is `gpt-5-nano`, with low reasoning effort and concise output. The model can request validated memory searches and controlled memory changes. Tool calls are audited and shown in the API-call inspector. Memory deletion remains an explicit owner action.
 
 Phases 2 through 6 are implemented at core scope. Use `/remember a detail to save` in Telegram to create a visible memory card. Visit `http://127.0.0.1:8080/` for the local dashboard. It links to memories, conversations, full API calls, health, retrieval, settings, and system controls.
 

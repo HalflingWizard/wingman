@@ -496,6 +496,7 @@ def finish_agent_run(
     latency_ms: int | None = None,
     error: str | None = None,
     response_snapshot: str | None = None,
+    request_snapshot: str | None = None,
     input_tokens: int | None = None,
     output_tokens: int | None = None,
 ) -> None:
@@ -506,6 +507,8 @@ def finish_agent_run(
     run.latency_ms = latency_ms
     run.error = error
     run.response_snapshot = response_snapshot
+    if request_snapshot is not None:
+        run.request_snapshot = request_snapshot
     run.input_tokens = input_tokens
     run.output_tokens = output_tokens
     run.completed_at = datetime.now(UTC)

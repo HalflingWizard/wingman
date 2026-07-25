@@ -45,6 +45,7 @@ class AddMemoryNoteInput(BaseModel):
 
 class SearchMemoriesInput(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
+    top_k: int = Field(default=5, ge=1, le=8)
 
 
 class MemoryToolExecutor:
@@ -57,7 +58,9 @@ class MemoryToolExecutor:
         try:
             if name == "search_memories":
                 search_data = SearchMemoriesInput.model_validate(arguments)
-                matches = retrieve_memories(self.session, self.user, search_data.query, limit=5)
+                matches = retrieve_memories(
+                    self.session, self.user, search_data.query, limit=search_data.top_k
+                )
                 output: dict[str, Any] = {
                     "memories": [
                         {
