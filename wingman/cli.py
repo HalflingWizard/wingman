@@ -39,7 +39,7 @@ def start(no_browser: bool) -> None:
 
     thread = threading.Thread(target=web_server, daemon=True)
     thread.start()
-    address = f"http://{settings.web_host}:{settings.web_port}/health"
+    address = f"http://{settings.web_host}:{settings.web_port}/"
     print(f"Wingman {__version__} is running at {address}")
     if not no_browser:
         webbrowser.open(address)

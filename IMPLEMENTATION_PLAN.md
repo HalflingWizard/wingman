@@ -67,6 +67,9 @@ Delivered in Phase 4
 - Added a full API-call inspector showing stored prompts, context, recent messages, responses, token use, latency, and errors.
 - Added conversation inspection with summaries and recent messages.
 - Added Phase 4 tests for these interfaces and lifecycle behaviors.
+- Updated the startup browser target to the dashboard and added navigation to the health page.
+- Separated static instructions, dynamic context, and recent conversation history in the actual Responses API payload.
+- Added formatted fixed-height scroll panels for full API request and response inspection.
 
 ## Phase 5
 

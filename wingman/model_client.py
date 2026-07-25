@@ -21,19 +21,31 @@ class ModelClient:
         messages: list[tuple[str, str]],
         user_name: str,
         person_name: str,
-        context: str = "",
+        static_context: str = "",
+        dynamic_context: str = "",
     ) -> str:
         prompt = (
-            "You are a thoughtful private relationship wingman. Be natural and concise. "
-            "Do not recommend manipulation, pressure, surveillance, or deception. "
+            f"{static_context} "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
-            f"{person_name or 'someone important to the user'}. "
-            f"{context}"
+            f"{person_name or 'someone important to the user'}."
         )
+        input_messages: list[dict[str, str]] = []
+        if dynamic_context:
+            input_messages.append(
+                {
+                    "role": "developer",
+                    "content": (
+                        "The following dynamic context was retrieved for this turn. "
+                        "Use it when relevant. Do not mention retrieval mechanics or scores.\n"
+                        + dynamic_context
+                    ),
+                }
+            )
+        input_messages.extend({"role": role, "content": text} for role, text in messages[-20:])
         response = await self.client.responses.create(
             model=self.model,
             instructions=prompt,
-            input=cast(Any, [{"role": role, "content": text} for role, text in messages[-20:]]),
+            input=cast(Any, input_messages),
         )
         usage = response.usage
         self.last_usage = (

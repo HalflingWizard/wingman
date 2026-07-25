@@ -243,6 +243,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 message.text,
                 results,
                 settings.timezone,
+                primary_person_name=settings.primary_person_name,
                 summary=summary,
                 pending_state=pending_state,
                 max_messages=settings.recent_message_limit,
@@ -273,6 +274,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 settings.user_name,
                 settings.primary_person_name,
                 built_context.static_context,
+                built_context.dynamic_context,
             )
         except Exception as exc:
             with sessions() as session:

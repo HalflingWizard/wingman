@@ -28,7 +28,7 @@ wingman doctor
 wingman start
 ```
 
-The default local address is `http://127.0.0.1:8080/health`. PostgreSQL and Docker are not required for Phase 1.
+The default dashboard address is `http://127.0.0.1:8080/`. The health page is available at `http://127.0.0.1:8080/health`. PostgreSQL and Docker are not required for Phase 1.
 
 Copy `.env.example` to `.env` and fill in the Telegram and OpenAI values. Find a Telegram user ID with a trusted Telegram ID bot, then check that the value is numeric before saving it.
 

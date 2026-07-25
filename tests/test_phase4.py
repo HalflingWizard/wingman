@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import initialize_database, session_factory
+from wingman.model_client import ModelClient
 from wingman.models import Memory, User
 from wingman.services import (
     add_memory_note,
@@ -109,3 +111,41 @@ def test_summary_pending_state_and_context_budget(tmp_path):
         state.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         session.commit()
         assert get_open_pending_state(session, user, conversation) is None
+
+
+def test_responses_payload_separates_static_dynamic_and_history():
+    settings = Settings(openai_api_key="test-key")
+    client = ModelClient(settings)
+    calls = []
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_text="Use the silver accessories memory.",
+                usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+            )
+
+    client.client = SimpleNamespace(responses=FakeResponses())
+    import asyncio
+
+    answer = asyncio.run(
+        client.reply(
+            [("user", "what accessories should I consider?")],
+            "Matt",
+            "Chloe",
+            "Static profile and safety rules.",
+            "Relevant saved context\n- She likes silver accessories.",
+        )
+    )
+    assert answer.startswith("Use the silver")
+    request = calls[0]
+    assert request["instructions"] == (
+        "Static profile and safety rules. The user's name is Matt. The person discussed is Chloe."
+    )
+    assert request["input"][0]["role"] == "developer"
+    assert "silver accessories" in request["input"][0]["content"]
+    assert request["input"][1] == {
+        "role": "user",
+        "content": "what accessories should I consider?",
+    }

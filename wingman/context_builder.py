@@ -1,6 +1,8 @@
 """Build compact model context from recent messages and retrieved memories."""
 
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from wingman.models import Conversation, ConversationSummary, PendingState, User
 from wingman.retrieval import RetrievalResult
@@ -23,18 +25,26 @@ def build_context(
     query: str,
     retrieved: list[RetrievalResult],
     timezone: str,
+    primary_person_name: str = "",
     summary: ConversationSummary | None = None,
     pending_state: PendingState | None = None,
     max_messages: int = 20,
     max_memories: int = 8,
     token_budget: int = 4000,
 ) -> BuiltContext:
+    try:
+        current_time = datetime.now(ZoneInfo(timezone)).isoformat(timespec="minutes")
+    except Exception:
+        current_time = datetime.now().astimezone().isoformat(timespec="minutes")
     static_context = (
         "You are a thoughtful private relationship wingman. Be natural and concise. "
         "Do not recommend manipulation, pressure, surveillance, or deception. "
+        "Keep facts, observations, and inferences separate. Do not treat one observation "
+        "as proof of a general preference. Use relevant saved context when it helps answer "
+        "the user's question, and explain the connection naturally. "
         f"The user's name is {user.name or 'the user'}. "
-        f"The primary person's name is configured by the owner. The timezone is {timezone}. "
-        f"The current user request is {query}"
+        f"The primary person's name is {primary_person_name or 'not configured'}. "
+        f"The user's timezone is {timezone}. The current local date and time is {current_time}."
     )
     memories = retrieved[:max_memories]
     memory_lines = [f"- {item.memory.statement} ({item.memory.status})" for item in memories]

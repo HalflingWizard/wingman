@@ -1,5 +1,6 @@
 """FastAPI application."""
 
+import json
 from html import escape
 
 from fastapi import FastAPI, Form, HTTPException
@@ -44,6 +45,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openai = "configured" if active_settings.openai_api_key else "not configured"
         return (
             "<html><head><title>Wingman health</title></head><body>"
+            "<nav><a href='/'>Dashboard</a> | <a href='/health'>Health</a> | "
+            "<a href='/memories'>Memories</a> | <a href='/conversations'>Conversations</a> | "
+            "<a href='/api-calls'>API calls</a> | <a href='/retrieval'>Retrieval</a></nav>"
             f"<h1>Wingman {__version__}</h1><p>Database {database}</p>"
             f"<p>Telegram {telegram}</p><p>OpenAI {openai}</p>"
             "</body></html>"
@@ -247,13 +251,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         cards = []
         for run in runs:
+            try:
+                formatted_request = json.dumps(
+                    json.loads(run.request_snapshot or "{}"),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            except json.JSONDecodeError:
+                formatted_request = run.request_snapshot or ""
             cards.append(
                 "<article style='border:1px solid #ddd;padding:1rem;margin:1rem 0'>"
                 f"<h2>{escape(run.model_name)} {escape(run.status)}</h2>"
                 f"<p>Latency {run.latency_ms} ms. Input tokens {run.input_tokens}. "
                 f"Output tokens {run.output_tokens}.</p>"
-                f"<h3>Full request</h3><pre>{escape(run.request_snapshot or '')}</pre>"
-                f"<h3>Full response</h3><pre>{escape(run.response_snapshot or '')}</pre>"
+                "<h3>Full request</h3>"
+                f"<pre style='max-height:420px;overflow:auto;background:#f6f8fa;"
+                f"padding:1rem;white-space:pre-wrap'>{escape(formatted_request)}</pre>"
+                "<h3>Full response</h3>"
+                f"<pre style='max-height:420px;overflow:auto;background:#f6f8fa;"
+                f"padding:1rem;white-space:pre-wrap'>{escape(run.response_snapshot or '')}</pre>"
                 f"<p>Error {escape(run.error or '')}</p></article>"
             )
         return (
