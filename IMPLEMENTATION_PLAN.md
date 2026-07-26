@@ -1,6 +1,6 @@
 # Implementation plan
 
-Wingman 4.2.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 4.3.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
 
 ## Product requirements
 
@@ -501,6 +501,8 @@ Better memory retrieval and tool schema reliability
 
 ### Phase 4.3
 
+Status complete
+
 Operational logs and failure history
 
 - Replace the current tool-call-only logs page with a live last-100-lines runtime output view.
@@ -509,3 +511,13 @@ Operational logs and failure history
 - Record processing failures without storing raw credentials or unnecessary media bytes.
 - Add filtering by date, error type, operation, and severity.
 - Keep live output bounded and make detailed errors copyable and scrollable.
+- The removed sticker status work is intentionally not part of this release.
+
+### Release hardening
+
+Status complete
+
+- Run the full automated test suite, lint, formatting, type checks, and diff checks.
+- Verify dashboard routes, live logs, durable error history, and bounded diagnostic queries.
+- Verify that tests clean up temporary planning records and media files.
+- Keep release notes limited to the current release.

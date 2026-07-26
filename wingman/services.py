@@ -30,6 +30,7 @@ from wingman.models import (
     ToolExecution,
     User,
 )
+from wingman.runtime_log import record_runtime_output
 
 
 def authorized_user(session: Session, owner_id: int) -> User | None:
@@ -937,6 +938,11 @@ def record_runtime_error(
     )
     session.add(record)
     session.commit()
+    record_runtime_output(
+        f"{stage} failed with {error.__class__.__name__}: {str(error) or error.__class__.__name__}",
+        level="error",
+        operation=stage,
+    )
     return record
 
 

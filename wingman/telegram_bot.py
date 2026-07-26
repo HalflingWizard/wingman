@@ -40,6 +40,7 @@ from wingman.retrieval import (
     retrieval_query,
     retrieve_memories,
 )
+from wingman.runtime_log import record_runtime_output
 from wingman.services import (
     action_ledger,
     add_message,
@@ -720,6 +721,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         message = primary
         assert message.from_user is not None
         owner_id = message.from_user.id
+        record_runtime_output(
+            f"Received a batch with {len(batch)} message(s)", operation="telegram intake"
+        )
 
         def record_dashboard_status(user_text: str, assistant_text: str) -> None:
             with sessions() as session:
@@ -832,6 +836,11 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     inbound,
                     text="\n\n".join(part for part in [inbound.text, *additional_text] if part),
                 )
+            record_runtime_output(
+                f"Prepared {inbound.source_type} input with "
+                f"{len(inbound.attachments)} attachment(s)",
+                operation="media processing",
+            )
             await send_typing(message)
         except (RuntimeError, ValueError) as exc:
             with sessions() as session:
@@ -1059,6 +1068,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 return executor.execute(name, arguments)
 
         try:
+            record_runtime_output("Started model response", operation="model response")
             answer = await asyncio.wait_for(
                 with_typing(
                     message,
@@ -1092,6 +1102,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             reply = (
                 "I could not finish the reply because the language model took too long to respond."
             )
+            record_runtime_output(reply, level="error", operation="model response timeout")
             record_dashboard_assistant(reply)
             await message.answer(reply)
             cleanup_inbound_attachments(inbound)
@@ -1110,6 +1121,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
                 record_runtime_error(session, user, "model response", exc, message.message_id)
             reply = "I could not write a reply because the language model returned an error."
+            record_runtime_output(reply, level="error", operation="model response")
             record_dashboard_assistant(reply)
             await message.answer(reply)
             cleanup_inbound_attachments(inbound)
@@ -1137,6 +1149,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             conversation = get_or_create_conversation(session, user)
             add_message(session, conversation, "assistant", answer)
         await message.answer(answer)
+        record_runtime_output("Sent model response", operation="telegram reply")
 
         published_memory_ids: set[str] = set()
         for trace in model_client.last_tool_trace:

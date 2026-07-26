@@ -40,7 +40,7 @@ Do not require live Telegram or OpenAI credentials for tests. If a change sends 
 
 ## Version and phase policy
 
-The current release is 4.2.0. Every implemented phase increments the release version.
+The current release is 4.3.0. Every implemented phase increments the release version.
 
 | Phase | Version |
 | --- | --- |

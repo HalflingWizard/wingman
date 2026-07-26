@@ -34,6 +34,7 @@ from wingman.models import (
     User,
 )
 from wingman.prompting import load_prompt, save_prompt
+from wingman.runtime_log import recent_runtime_output
 from wingman.services import (
     add_memory_note,
     confirm_memory,
@@ -1125,7 +1126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 else "source unavailable"
             )
             error_cards.append(
-                "<article class='record'>"
+                f"<article class='record runtime-error' data-search='{escape((error.stage + ' ' + error.exception_type + ' ' + error.message).casefold())}' data-date='{escape(error.created_at.date().isoformat())}'>"
                 f"<div class='record-top'><h2>{escape(error.stage)}</h2>"
                 f"<span class='badge'>{escape(error.exception_type)}</span></div>"
                 f"<p class='muted'>{escape(error.created_at.isoformat())}. {escape(location)}. Telegram message {escape(str(error.telegram_message_id or 'none'))}</p>"
@@ -1133,8 +1134,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Runtime diagnostics</p><h1>Logs</h1>"
-            "<p class='muted'>Inspect what tools were called, what they returned, and whether persistence was verified. Secrets are redacted.</p></div></header>"
+            "<p class='muted'>Inspect live runtime output, tool calls, model runs, and durable failures. Secrets and media bytes are redacted.</p></div></header>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-tower-broadcast'></i> Live runtime output</h2><span class='muted'>Latest 100 lines</span></div>"
+            "<pre id='live-runtime-output' class='code-block' style='max-height:360px'>Loading runtime output...</pre>"
+            "<script>async function refreshRuntimeOutput(){const response=await fetch('/api/logs/live');if(!response.ok)return;const data=await response.json();document.querySelector('#live-runtime-output').textContent=data.lines.map(line=>`${line.timestamp} [${line.level}] ${line.operation} ${line.message}`).join('\\n')||'No runtime output yet.';}refreshRuntimeOutput();setInterval(refreshRuntimeOutput,2000);</script></section>"
             "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-triangle-exclamation'></i> Error history</h2>"
+            "<div class='form-actions'><label class='muted'>Date <input id='error-date-filter' type='date'></label><label class='muted'>Search <input id='error-search-filter' type='search' placeholder='stage or error type'></label></div>"
             + ("".join(error_cards) or "<p class='muted'>No runtime errors recorded.</p>")
             + "</section>"
             "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-list-check'></i> Tool executions</h2>"
@@ -1142,8 +1147,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             + "</section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-robot'></i> Agent runs</h2>"
             + ("".join(run_cards) or "<p class='muted'>No agent runs recorded yet.</p>")
             + "</section>"
+            + "<script>function filterErrors(){const date=document.querySelector('#error-date-filter').value;const query=document.querySelector('#error-search-filter').value.toLowerCase();document.querySelectorAll('.runtime-error').forEach(card=>{card.hidden=(date&&card.dataset.date!==date)||(query&&!card.dataset.search.includes(query));});}document.querySelector('#error-date-filter').addEventListener('input',filterErrors);document.querySelector('#error-search-filter').addEventListener('input',filterErrors);</script>"
         )
         return page_shell("Logs", body, "logs")
+
+    @app.get("/api/logs/live")
+    def live_logs() -> dict[str, Any]:
+        return {"lines": recent_runtime_output()}
 
     @app.get("/api-calls", response_class=HTMLResponse)
     def api_calls() -> str:
