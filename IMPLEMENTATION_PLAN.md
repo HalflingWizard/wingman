@@ -333,20 +333,31 @@ Delivered
 - Added image metadata fields for provider ID, size, dimensions, media type, and expiration tracking.
 - Added sanitized image diagnostics that omit raw image bytes from API snapshots.
 - Added regression tests for image-only input, captioned images, diagnostics, and cleanup.
+- Uses high image detail by default and accepts image files sent as Telegram documents to avoid photo compression when original quality matters.
+- Added explicit image capability guidance so responses do not claim unsupported OCR, browsing, metadata, or external actions.
 
 ### Phase 3.6
 
 Supported document attachments
 
-Status pending
+Status complete
 
 - Accept an explicit allowlist of readable formats, initially PDF, DOCX, TXT, Markdown, CSV, and JSON.
 - Reject executables, archives, unsupported office formats, and unknown extensions with a clear user-facing message.
 - Decide per format whether to use provider file input or local extraction, based on size, privacy, and API support.
 - Preserve document name, type, size, page or character estimates, and processing status without retaining the local file.
 - Send extracted or provider-readable content together with the caption and other message content.
-- Apply page, character, size, and timeout limits so a large document cannot consume the entire context budget.
+- Apply character, size, and download timeout limits. Preserve page counts when a provider or future extractor supplies them.
 - Add tests for valid files, invalid files, extraction failures, cleanup, and mixed image plus document messages.
+
+Delivered
+
+- Added an allowlist for PDF, DOCX, TXT, Markdown, CSV, and JSON Telegram documents.
+- Added byte and UTF-8 character limits with clear rejection messages.
+- Added a bounded document download timeout.
+- Added temporary document files with cleanup after processing and metadata-only persistence.
+- Added Responses API `input_file` parts with sanitized request diagnostics.
+- Added regression coverage for supported and unsupported types, document input, metadata, and cleanup.
 
 ### Phase 3.7
 

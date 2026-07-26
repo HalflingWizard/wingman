@@ -47,6 +47,7 @@ def test_image_input_is_sent_as_multimodal_content_without_raw_bytes_in_diagnost
     content = calls[0]["input"][-1]["content"]
     assert content[0] == {"type": "input_text", "text": "What do you notice?"}
     assert content[1]["type"] == "input_image"
+    assert content[1]["detail"] == "high"
     assert content[1]["image_url"].startswith("data:image/jpeg;base64,")
     snapshot = json.dumps(client.last_request_snapshot)
     assert "fake-image-bytes" not in snapshot

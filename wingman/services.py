@@ -90,6 +90,8 @@ def save_message_attachments(
             size_bytes=attachment.size_bytes,
             width=attachment.width,
             height=attachment.height,
+            estimated_characters=attachment.estimated_characters,
+            page_count=attachment.page_count,
             expires_at=attachment.expires_at,
             processing_status="processed",
             processed_at=datetime.now(UTC),

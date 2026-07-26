@@ -6,6 +6,7 @@ from collections.abc import Awaitable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from time import perf_counter
 from typing import Any
@@ -60,6 +61,23 @@ from wingman.services import (
     set_memory_embedding,
 )
 from wingman.tools import MemoryToolExecutor
+
+SUPPORTED_DOCUMENTS = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+}
+
+
+def supported_document_type(filename: str, mime_type: str | None = None) -> str | None:
+    extension = Path(filename).suffix.casefold()
+    if extension not in SUPPORTED_DOCUMENTS:
+        return None
+    return mime_type or SUPPORTED_DOCUMENTS[extension]
 
 
 def memory_card(memory: Memory) -> tuple[str, InlineKeyboardMarkup]:
@@ -239,6 +257,138 @@ async def download_photo(message: TelegramMessage, settings: Settings) -> Inboun
     return await download_photos([message], settings)
 
 
+async def download_image_document(message: TelegramMessage, settings: Settings) -> InboundMessage:
+    document = message.document
+    if document is None or message.bot is None:
+        raise ValueError("Image document is not available")
+    content_type = document.mime_type or ""
+    filename = document.file_name or "wingman-image"
+    if not content_type.casefold().startswith("image/"):
+        raise ValueError(
+            "This file type is not supported yet. I can currently process text, voice, and images."
+        )
+    if document.file_size and document.file_size > settings.image_max_bytes:
+        raise ValueError("Image is too large")
+    remote_file = await message.bot.get_file(document.file_id)
+    if not remote_file.file_path:
+        raise RuntimeError("Telegram did not provide an image file path")
+    buffer = BytesIO()
+    local_path = ""
+    try:
+        await message.bot.download_file(remote_file.file_path, destination=buffer)
+        image = buffer.getvalue()
+        if len(image) > settings.image_max_bytes:
+            raise ValueError("Image is too large")
+        with NamedTemporaryFile(prefix="wingman-image-", suffix=".bin", delete=False) as file:
+            file.write(image)
+            local_path = file.name
+    except Exception:
+        if local_path:
+            cleanup_inbound_attachments(
+                InboundMessage(
+                    "",
+                    attachments=(
+                        InboundAttachment(
+                            "telegram_image", document.file_id, local_path=local_path
+                        ),
+                    ),
+                )
+            )
+        raise
+    finally:
+        buffer.close()
+    return InboundMessage(
+        text=message.caption or "",
+        source_type="telegram_image",
+        provider_message_id=message.message_id,
+        attachments=(
+            InboundAttachment(
+                source_type="telegram_image",
+                provider_file_id=document.file_id,
+                filename=filename,
+                content_type=content_type,
+                local_path=local_path,
+                size_bytes=len(image),
+                expires_at=datetime.now(UTC)
+                + timedelta(seconds=settings.attachment_retention_seconds),
+            ),
+        ),
+    )
+
+
+async def download_document(message: TelegramMessage, settings: Settings) -> InboundMessage:
+    document = message.document
+    if document is None or message.bot is None:
+        raise ValueError("Document is not available")
+    filename = document.file_name or "wingman-document"
+    extension = Path(filename).suffix.casefold()
+    content_type = supported_document_type(filename, document.mime_type)
+    if content_type is None:
+        raise ValueError(
+            "This file type is not supported yet. Supported files are PDF, DOCX, TXT, "
+            "Markdown, CSV, and JSON."
+        )
+    if document.file_size and document.file_size > settings.document_max_bytes:
+        raise ValueError("Document is too large")
+    remote_file = await message.bot.get_file(document.file_id)
+    if not remote_file.file_path:
+        raise RuntimeError("Telegram did not provide a document file path")
+    buffer = BytesIO()
+    local_path = ""
+    try:
+        await asyncio.wait_for(
+            message.bot.download_file(remote_file.file_path, destination=buffer),
+            timeout=settings.document_processing_timeout_seconds,
+        )
+        document_bytes = buffer.getvalue()
+        if len(document_bytes) > settings.document_max_bytes:
+            raise ValueError("Document is too large")
+        estimated_characters = None
+        if extension in {".txt", ".md", ".markdown", ".csv", ".json"}:
+            try:
+                estimated_characters = len(document_bytes.decode("utf-8"))
+            except UnicodeDecodeError as exc:
+                raise ValueError("Text documents must use UTF-8 encoding") from exc
+            if estimated_characters > settings.document_max_characters:
+                raise ValueError("Text document is too long")
+        with NamedTemporaryFile(prefix="wingman-document-", suffix=extension, delete=False) as file:
+            file.write(document_bytes)
+            local_path = file.name
+    except Exception:
+        if local_path:
+            cleanup_inbound_attachments(
+                InboundMessage(
+                    "",
+                    attachments=(
+                        InboundAttachment(
+                            "telegram_document", document.file_id, local_path=local_path
+                        ),
+                    ),
+                )
+            )
+        raise
+    finally:
+        buffer.close()
+    return InboundMessage(
+        text=message.caption or "",
+        source_type="telegram_document",
+        provider_message_id=message.message_id,
+        attachments=(
+            InboundAttachment(
+                source_type="telegram_document",
+                provider_file_id=document.file_id,
+                filename=filename,
+                content_type=content_type,
+                local_path=local_path,
+                size_bytes=len(document_bytes),
+                estimated_characters=estimated_characters,
+                expires_at=datetime.now(UTC)
+                + timedelta(seconds=settings.attachment_retention_seconds),
+            ),
+        ),
+    )
+
+
 def build_dispatcher(settings: Settings) -> Dispatcher:
     dispatcher = Dispatcher()
     router = Router()
@@ -350,10 +500,15 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     async def chat(message: TelegramMessage) -> None:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
-        if not message.text and message.voice is None and not message.photo:
+        if (
+            not message.text
+            and message.voice is None
+            and not message.photo
+            and not message.document
+        ):
             await message.answer(
-                "I can process text messages right now. Voice messages and other media support "
-                "will be added soon."
+                "I can process text, voice, and image messages. "
+                "This message type is not supported yet."
             )
             return
         owner_id = message.from_user.id
@@ -386,6 +541,14 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     )
                 else:
                     inbound = await with_typing(message, download_photo(message, settings))
+            elif message.document:
+                if model_client is None:
+                    await message.answer("I need an OpenAI API key to analyze files.")
+                    return
+                if (message.document.mime_type or "").casefold().startswith("image/"):
+                    inbound = await with_typing(message, download_image_document(message, settings))
+                else:
+                    inbound = await with_typing(message, download_document(message, settings))
             else:
                 inbound = InboundMessage(
                     text=message.text or "",

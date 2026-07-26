@@ -58,6 +58,8 @@ def initialize_database(settings: Settings) -> None:
                 "size_bytes": "INTEGER",
                 "width": "INTEGER",
                 "height": "INTEGER",
+                "estimated_characters": "INTEGER",
+                "page_count": "INTEGER",
             }
             attachment_table_columns = {
                 row[1] for row in connection.execute(text("PRAGMA table_info(message_attachments)"))

@@ -335,10 +335,12 @@ class ModelClient:
         self.client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=30.0, max_retries=2)
         self.model = settings.openai_main_model
         self.summary_model = settings.openai_summary_model
+        self.image_detail = settings.image_detail
         self.last_usage: tuple[int | None, int | None] = (None, None)
         self.last_request_snapshot: dict[str, Any] = {}
         self.last_transcription_snapshot: dict[str, Any] = {}
         self.last_image_snapshot: dict[str, Any] = {"count": 0, "images": []}
+        self.last_document_snapshot: dict[str, Any] = {"count": 0, "documents": []}
 
     async def reply(
         self,
@@ -388,6 +390,19 @@ class ModelClient:
             "and never mention the internal tool call, parameters, confidence, importance, "
             "database status, or record IDs. After saving, use one or two natural sentences "
             "and let the card provide the details and controls. "
+            "Image capability guidance. When images are attached, you can describe visible "
+            "content, read or translate text that is actually legible, compare the attached "
+            "images, and answer questions grounded in what they show. Be honest about image "
+            "quality and uncertainty. You cannot recover text that is unreadable, inspect "
+            "unattached files, browse the web, verify hidden metadata, identify private facts "
+            "not visible in the image, or perform actions that are not provided by the available "
+            "tools. Do not imply that you performed unsupported work. If the owner asks for an "
+            "unsupported capability, say so briefly and offer only a relevant supported option. "
+            "Document capability guidance. For attached PDF, DOCX, TXT, Markdown, CSV, and JSON "
+            "files, you can summarize, answer questions about their contents, extract visible "
+            "text, and translate supported text. You cannot edit files, execute code, browse "
+            "external sources, or inspect unsupported formats. Do not claim to have performed "
+            "an unsupported file action. "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
             f"{person_name or 'someone important to the user'}."
         )
@@ -409,47 +424,88 @@ class ModelClient:
             for attachment in attachments
             if (attachment.content_type or "").casefold().startswith("image/")
         )
-        if image_attachments:
+        document_attachments = tuple(
+            attachment
+            for attachment in attachments
+            if attachment.source_type == "telegram_document"
+        )
+        input_attachments = tuple(
+            attachment
+            for attachment in attachments
+            if attachment in image_attachments + document_attachments
+        )
+        if input_attachments:
             if not input_messages or input_messages[-1].get("role") != "user":
-                raise ValueError("Image input must be attached to a user message")
+                raise ValueError("Attachment input must be attached to a user message")
             content: list[dict[str, Any]] = []
             caption = str(input_messages[-1].get("content") or "").strip()
             if caption:
                 content.append({"type": "input_text", "text": caption})
             image_diagnostics: list[dict[str, Any]] = []
-            for attachment in image_attachments:
+            document_diagnostics: list[dict[str, Any]] = []
+            for attachment in input_attachments:
                 if not attachment.local_path:
-                    raise ValueError("Image input is missing its temporary file")
-                image_bytes = Path(attachment.local_path).read_bytes()
-                content.append(
-                    {
-                        "type": "input_image",
-                        "image_url": (
-                            f"data:{attachment.content_type or 'image/jpeg'};base64,"
-                            + base64.b64encode(image_bytes).decode("ascii")
-                        ),
-                        "detail": "low",
-                    }
-                )
-                image_diagnostics.append(
-                    {
-                        "filename": attachment.filename,
-                        "content_type": attachment.content_type,
-                        "provider_file_id": attachment.provider_file_id,
-                        "size_bytes": len(image_bytes),
-                        "width": attachment.width,
-                        "height": attachment.height,
-                        "raw_bytes_retained": False,
-                    }
-                )
+                    raise ValueError("Attachment is missing its temporary file")
+                attachment_bytes = Path(attachment.local_path).read_bytes()
+                if attachment in image_attachments:
+                    content.append(
+                        {
+                            "type": "input_image",
+                            "image_url": (
+                                f"data:{attachment.content_type or 'image/jpeg'};base64,"
+                                + base64.b64encode(attachment_bytes).decode("ascii")
+                            ),
+                            "detail": self.image_detail,
+                        }
+                    )
+                    image_diagnostics.append(
+                        {
+                            "filename": attachment.filename,
+                            "content_type": attachment.content_type,
+                            "provider_file_id": attachment.provider_file_id,
+                            "size_bytes": len(attachment_bytes),
+                            "width": attachment.width,
+                            "height": attachment.height,
+                            "raw_bytes_retained": False,
+                        }
+                    )
+                else:
+                    content.append(
+                        {
+                            "type": "input_file",
+                            "filename": attachment.filename or "attachment",
+                            "file_data": base64.b64encode(attachment_bytes).decode("ascii"),
+                        }
+                    )
+                    document_diagnostics.append(
+                        {
+                            "filename": attachment.filename,
+                            "content_type": attachment.content_type,
+                            "provider_file_id": attachment.provider_file_id,
+                            "size_bytes": len(attachment_bytes),
+                            "estimated_characters": attachment.estimated_characters,
+                            "page_count": attachment.page_count,
+                            "raw_bytes_retained": False,
+                        }
+                    )
             input_messages[-1] = {"role": "user", "content": content}
             self.last_image_snapshot = {
                 "count": len(image_diagnostics),
                 "images": image_diagnostics,
                 "raw_bytes_retained": False,
             }
+            self.last_document_snapshot = {
+                "count": len(document_diagnostics),
+                "documents": document_diagnostics,
+                "raw_bytes_retained": False,
+            }
         else:
             self.last_image_snapshot = {"count": 0, "images": [], "raw_bytes_retained": False}
+            self.last_document_snapshot = {
+                "count": 0,
+                "documents": [],
+                "raw_bytes_retained": False,
+            }
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": prompt,
@@ -472,12 +528,15 @@ class ModelClient:
                     safe_item = dict(content_item)
                     if safe_item.get("type") == "input_image":
                         safe_item["image_url"] = "[image bytes omitted]"
+                    if safe_item.get("type") == "input_file":
+                        safe_item["file_data"] = "[file bytes omitted]"
                     snapshot_content.append(safe_item)
                 snapshot_item["content"] = snapshot_content
             snapshot_input.append(snapshot_item)
         snapshot_request = dict(request)
         snapshot_request["input"] = snapshot_input
         snapshot_request["image_diagnostics"] = self.last_image_snapshot
+        snapshot_request["document_diagnostics"] = self.last_document_snapshot
         self.last_request_snapshot = snapshot_request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:

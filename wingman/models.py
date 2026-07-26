@@ -58,6 +58,8 @@ class MessageAttachment(Base):
     size_bytes: Mapped[int | None] = mapped_column(nullable=True)
     width: Mapped[int | None] = mapped_column(nullable=True)
     height: Mapped[int | None] = mapped_column(nullable=True)
+    estimated_characters: Mapped[int | None] = mapped_column(nullable=True)
+    page_count: Mapped[int | None] = mapped_column(nullable=True)
     processing_status: Mapped[str] = mapped_column(String(30), default="received")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

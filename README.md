@@ -21,6 +21,8 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Accept Telegram voice messages, transcribe them, and process them like text
 - Accept Telegram images with captions or without captions, including small image groups
 - Send image content to the vision-capable model while keeping image bytes temporary
+- Preserve original quality when an image is sent as a Telegram file instead of a compressed photo
+- Accept PDF, DOCX, TXT, Markdown, CSV, and JSON files for temporary analysis
 - Keep temporary attachment metadata for traceability while deleting local input files after processing
 - Inspect prompts, dynamic context, tool calls, retrieval scores, token use, latency, and errors
 
