@@ -30,7 +30,8 @@ def test_dashboard_uses_consistent_refined_layout(tmp_path):
     assert favicon.status_code == 200
     assert "class='record-statement'" in memories
     assert "<textarea name='statement'" in memories
-    assert "class='planning-grid'" in planning
-    assert "class='item-list'" in planning
+    assert "Places" in planning
+    assert "Saved ideas" in planning
+    assert "Search this section" in planning
     assert "class='conversation-list'" in conversations
     assert "message-user" in conversations

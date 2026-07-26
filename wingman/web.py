@@ -62,8 +62,12 @@ from wingman.services import (
     list_saved_ideas,
     message_display_text,
     purge_planning_record,
+    update_event,
     update_memory,
     update_memory_note,
+    update_place,
+    update_reminder,
+    update_saved_idea,
 )
 from wingman.system import (
     backup_database,
@@ -859,56 +863,124 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_factory(active_settings)() as session:
             user = web_user(session)
             include_deleted = request.query_params.get("show_deleted") == "1"
+            tab = request.query_params.get("tab", "places")
+            if tab not in {"places", "ideas", "events", "reminders"}:
+                tab = "places"
+            search = request.query_params.get("q", "").strip().casefold()
             places = list_places(session, user, include_deleted=include_deleted)
             ideas = list_saved_ideas(session, user, include_deleted=include_deleted)
             events = list_events(session, user, include_deleted=include_deleted)
             reminders = list_reminders(session, user, include_deleted=include_deleted)
+
+        def matches(text: str) -> bool:
+            return not search or search in text.casefold()
+
+        places = [
+            place
+            for place in places
+            if matches(f"{place.name} {place.city} {place.address} {place.description}")
+        ]
+        ideas = [idea for idea in ideas if matches(f"{idea.title} {idea.reason}")]
+        events = [event for event in events if matches(f"{event.title} {event.description}")]
+        reminders = [reminder for reminder in reminders if matches(reminder.title)]
+
+        def record_actions(entity_type: str, record_id: str, title: str, fields: str) -> str:
+            return (
+                f"<details class='edit-form'><summary>Edit</summary>"
+                f"<form method='post' action='/planning/{entity_type}/{record_id}/edit' class='stack compact-form'>"
+                f"{fields}<div class='record-actions'><button><i class='fa-solid fa-floppy-disk'></i> Save changes</button></div></form>"
+                f"<form method='post' action='/planning/{entity_type}/{record_id}/delete' onsubmit=\"return confirm('Permanently delete {escape(title, quote=True)}? This cannot be undone.')\"><button class='button-danger'><i class='fa-solid fa-trash'></i> Permanently delete</button></form></details>"
+            )
+
         place_rows = "".join(
-            f"<li class='item-row'><i class='fa-solid fa-location-dot'></i><div><strong>{escape(place.name)}</strong>"
-            f"<small>{escape(place.status)} · {escape(place.city or place.address or 'Location unknown')}</small>"
-            f"<small>{escape(place.description)}</small></div></li>"
+            f"<article class='record'><div class='record-top'><h3>📍 {escape(place.name)}</h3><span class='badge'>{escape(place.status)}</span></div>"
+            f"<p>{escape(place.description or 'No description yet')}</p><p class='muted'>{escape(place.city or place.address or 'Location unknown')}</p>"
+            + record_actions(
+                "places",
+                place.id,
+                place.name,
+                f"<input name='name' value='{escape(place.name, quote=True)}' required><input name='address' value='{escape(place.address, quote=True)}' placeholder='Address'><input name='city' value='{escape(place.city, quote=True)}' placeholder='City'><textarea name='description' placeholder='Description'>{escape(place.description)}</textarea>",
+            )
+            + "</article>"
             for place in places
         )
         idea_rows = "".join(
-            f"<li class='item-row'><i class='fa-solid fa-lightbulb'></i><div><strong>{escape(idea.title)}</strong>"
-            f"<small>{escape(idea.reason or 'No reason added yet')}</small></div></li>"
+            f"<article class='record'><div class='record-top'><h3>💡 {escape(idea.title)}</h3><span class='badge'>{escape(idea.status)}</span></div>"
+            f"<p>{escape(idea.reason or 'No reason added yet')}</p>"
+            + record_actions(
+                "ideas",
+                idea.id,
+                idea.title,
+                f"<input name='title' value='{escape(idea.title, quote=True)}' required><textarea name='reason' placeholder='Why it fits'>{escape(idea.reason)}</textarea>",
+            )
+            + "</article>"
             for idea in ideas
         )
         event_rows = "".join(
-            f"<li class='item-row'><i class='fa-solid fa-calendar-day'></i><div><strong>{escape(event.title)}</strong>"
-            f"<small>{escape(event.start_at.isoformat())} · {escape(event.status)}</small>"
-            f"<small>{escape(event.description)}</small></div></li>"
+            f"<article class='record'><div class='record-top'><h3>📅 {escape(event.title)}</h3><span class='badge'>{escape(event.status)}</span></div>"
+            f"<p class='muted'>{escape(event.start_at.isoformat())}</p><p>{escape(event.description)}</p>"
+            + record_actions(
+                "events",
+                event.id,
+                event.title,
+                f"<input name='title' value='{escape(event.title, quote=True)}' required><input name='start_at' type='datetime-local' value='{escape(event.start_at.strftime('%Y-%m-%dT%H:%M'))}' required><textarea name='description'>{escape(event.description)}</textarea>",
+            )
+            + "</article>"
             for event in events
         )
         reminder_rows = "".join(
-            f"<li class='item-row'><i class='fa-solid fa-bell'></i><div><strong>{escape(reminder.title)}</strong>"
-            f"<small>{escape(reminder.scheduled_at.isoformat())} · {escape(reminder.status)}</small></div></li>"
+            f"<article class='record'><div class='record-top'><h3>⏰ {escape(reminder.title)}</h3><span class='badge'>{escape(reminder.status)}</span></div>"
+            f"<p class='muted'>{escape(reminder.scheduled_at.isoformat())}</p>"
+            + record_actions(
+                "reminders",
+                reminder.id,
+                reminder.title,
+                f"<input name='title' value='{escape(reminder.title, quote=True)}' required><input name='scheduled_at' type='datetime-local' value='{escape(reminder.scheduled_at.strftime('%Y-%m-%dT%H:%M'))}' required>",
+            )
+            + "</article>"
             for reminder in reminders
         )
+        tab_links = "".join(
+            f"<a class='button {'active' if tab == key else 'button-secondary'}' href='/planning?tab={key}'>{label}</a>"
+            for key, label in (
+                ("places", "Places"),
+                ("ideas", "Saved ideas"),
+                ("events", "Events"),
+                ("reminders", "Reminders"),
+            )
+        )
+        rows = {
+            "places": place_rows,
+            "ideas": idea_rows,
+            "events": event_rows,
+            "reminders": reminder_rows,
+        }[tab]
+        forms = {
+            "places": "<input name='name' placeholder='Name' required><input name='address' placeholder='Address'><input name='city' placeholder='City'><textarea name='description' placeholder='Description'></textarea><button><i class='fa-solid fa-plus'></i> Save place</button>",
+            "ideas": "<input name='title' placeholder='Idea' required><textarea name='reason' placeholder='Why it fits'></textarea><button><i class='fa-solid fa-plus'></i> Save idea</button>",
+            "events": "<input name='title' placeholder='Event' required><input name='start_at' type='datetime-local' required><textarea name='description' placeholder='Description'></textarea><button><i class='fa-solid fa-plus'></i> Save event</button>",
+            "reminders": "<input name='title' placeholder='Reminder' required><input name='scheduled_at' type='datetime-local' required><button><i class='fa-solid fa-plus'></i> Save reminder</button>",
+        }
+        headings = {
+            "places": "Places",
+            "ideas": "Saved ideas",
+            "events": "Events",
+            "reminders": "Reminders",
+        }
+        actions = {
+            "places": "places",
+            "ideas": "ideas",
+            "events": "events",
+            "reminders": "reminders",
+        }
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Relationship planning</p><h1>Planning</h1>"
             "<p class='muted'>Collect places, ideas, events, and reminders in one calm workspace.</p></div>"
-            f"<a class='button button-secondary' href='/planning{'?show_deleted=0' if include_deleted else '?show_deleted=1'}'>"
+            f"<a class='button button-secondary' href='/planning?tab={tab}&show_deleted={'0' if include_deleted else '1'}'>"
             f"{'Hide deleted' if include_deleted else 'Show deleted'}</a></header>"
-            "<div class='planning-grid'><section class='panel'>"
-            + "<h2 class='section-title'><i class='fa-solid fa-location-dot'></i> Add place</h2><form class='stack compact-form' method='post' action='/planning/places'>"
-            + "<input name='name' placeholder='Name' required><input name='address' placeholder='Address'>"
-            + "<input name='city' placeholder='City'><textarea name='description' placeholder='Description'></textarea>"
-            + "<button><i class='fa-solid fa-plus'></i> Save place</button></form><ul class='item-list'>"
-            + place_rows
-            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-lightbulb'></i> Add saved idea</h2><form class='stack compact-form' method='post' action='/planning/ideas'>"
-            + "<input name='title' placeholder='Idea' required><textarea name='reason' placeholder='Why it fits'></textarea>"
-            + "<button><i class='fa-solid fa-plus'></i> Save idea</button></form><ul class='item-list'>"
-            + idea_rows
-            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-calendar-day'></i> Add event</h2><form class='stack compact-form' method='post' action='/planning/events'>"
-            + "<input name='title' placeholder='Event' required><input name='start_at' type='datetime-local' required>"
-            + "<textarea name='description' placeholder='Description'></textarea><button><i class='fa-solid fa-plus'></i> Save event</button></form><ul class='item-list'>"
-            + event_rows
-            + "</ul></section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-bell'></i> Add reminder</h2><form class='stack compact-form' method='post' action='/planning/reminders'>"
-            + "<input name='title' placeholder='Reminder' required><input name='scheduled_at' type='datetime-local' required>"
-            + "<button><i class='fa-solid fa-plus'></i> Save reminder</button></form><ul class='item-list'>"
-            + reminder_rows
-            + "</ul></section></div>"
+            + f"<section class='panel'><nav class='form-actions'>{tab_links}</nav><form method='get' action='/planning' class='form-actions'><input type='hidden' name='tab' value='{tab}'><input name='q' value='{escape(request.query_params.get('q', ''), quote=True)}' placeholder='Search this section'><button class='button-secondary'>Search</button></form></section>"
+            + f"<section class='panel'><h2 class='section-title'>{escape(headings[tab])}</h2><form class='stack compact-form' method='post' action='/planning/{actions[tab]}'>{forms[tab]}</form></section>"
+            + f"<section class='record-list'>{rows or "<p class='muted'>No records match this view.</p>"}</section>"
         )
         return page_shell("Planning", body, "planning")
 
@@ -957,7 +1029,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<label class='field'>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
             f"<label class='field'>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
             "<h2 class='section-title'><i class='fa-solid fa-location-dot'></i> Local settings</h2>"
-            f"<label class='field'>City or location <input id='timezone-city' list='timezone-cities' autocomplete='off' placeholder='Start typing a city, for example Philadelphia'><datalist id='timezone-cities'>{city_options}</datalist></label>"
+            f"<label class='field'>City or location <input id='timezone-city' name='location' value='{escape(active_settings.location, quote=True)}' list='timezone-cities' autocomplete='off' placeholder='Start typing a city, for example Philadelphia'><datalist id='timezone-cities'>{city_options}</datalist></label>"
             f"<label class='field'>Timezone <select id='timezone-select' name='timezone'>{timezone_options}</select></label></div>"
             f"<script>const timezoneCities={city_map};const cityInput=document.querySelector('#timezone-city');const cityList=document.querySelector('#timezone-cities');const timezoneSelect=document.querySelector('#timezone-select');let cityTimer;cityInput.addEventListener('input',()=>{{clearTimeout(cityTimer);const query=cityInput.value.trim();if(query.length<2)return;cityTimer=setTimeout(()=>fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(query)+'&count=8&language=en&format=json').then(response=>response.json()).then(data=>{{cityList.replaceChildren();(data.results||[]).forEach(city=>{{const label=[city.name,city.admin1,city.country].filter(Boolean).join(', ');const option=document.createElement('option');option.value=label;option.dataset.timezone=city.timezone||'';cityList.appendChild(option);}});}}).catch(()=>{{}}),250);}});cityInput.addEventListener('change',()=>{{const option=[...cityList.options].find(item=>item.value===cityInput.value);const zone=option?.dataset.timezone||timezoneCities[cityInput.value];if(zone)timezoneSelect.value=zone;}});</script>"
             "<p><button><i class='fa-solid fa-floppy-disk'></i> Save settings</button></p></form></section>"
@@ -975,6 +1047,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user_name: str = Form(""),
         primary_person_name: str = Form(""),
         timezone: str = Form(""),
+        location: str = Form(""),
     ) -> str:
         try:
             save_runtime_settings(
@@ -988,6 +1061,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "user_name": user_name,
                     "primary_person_name": primary_person_name,
                     "timezone": timezone,
+                    "location": location,
                 },
             )
         except (ValueError, OSError) as exc:
@@ -1154,6 +1228,82 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_factory(active_settings)() as session:
             user = web_user(session)
             create_reminder(session, user, title, parse_datetime(scheduled_at))
+        return planning(request)
+
+    @app.post("/planning/{entity_type}/{record_id}/edit", response_class=HTMLResponse)
+    def edit_planning_item(
+        request: Request,
+        entity_type: str,
+        record_id: str,
+        name: str = Form(""),
+        address: str = Form(""),
+        city: str = Form(""),
+        title: str = Form(""),
+        reason: str = Form(""),
+        description: str = Form(""),
+        start_at: str = Form(""),
+        scheduled_at: str = Form(""),
+    ) -> str:
+        try:
+            with session_factory(active_settings)() as session:
+                user = web_user(session)
+                if entity_type == "places":
+                    update_place(
+                        session,
+                        user,
+                        record_id,
+                        name=name,
+                        address=address,
+                        city=city,
+                        description=description,
+                    )
+                elif entity_type == "ideas":
+                    update_saved_idea(session, user, record_id, title=title, reason=reason)
+                elif entity_type == "events":
+                    update_event(
+                        session,
+                        user,
+                        record_id,
+                        title=title,
+                        start_at=parse_datetime(start_at),
+                        description=description,
+                    )
+                elif entity_type == "reminders":
+                    update_reminder(
+                        session,
+                        user,
+                        record_id,
+                        title=title,
+                        scheduled_at=parse_datetime(scheduled_at),
+                    )
+                else:
+                    raise ValueError("Unsupported planning type")
+        except (TypeError, ValueError) as exc:
+            return page_shell(
+                "Planning",
+                f"<section class='panel'><p>{escape(str(exc))}</p></section>",
+                "planning",
+            )
+        return planning(request)
+
+    @app.post("/planning/{entity_type}/{record_id}/delete", response_class=HTMLResponse)
+    def hard_delete_planning_item(request: Request, entity_type: str, record_id: str) -> str:
+        entity_map = {
+            "places": "place",
+            "ideas": "idea",
+            "events": "event",
+            "reminders": "reminder",
+        }
+        singular_type = entity_map.get(entity_type)
+        if singular_type is None:
+            return page_shell(
+                "Planning",
+                "<section class='panel'><p>Unsupported planning type.</p></section>",
+                "planning",
+            )
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            purge_planning_record(session, user, singular_type, record_id)
         return planning(request)
 
     @app.get("/logs", response_class=HTMLResponse)

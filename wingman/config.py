@@ -15,6 +15,7 @@ EDITABLE_SETTINGS = {
     "user_name": "WINGMAN_USER_NAME",
     "primary_person_name": "WINGMAN_PRIMARY_PERSON_NAME",
     "timezone": "WINGMAN_TIMEZONE",
+    "location": "WINGMAN_LOCATION",
 }
 
 
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     user_name: str = ""
     primary_person_name: str = ""
     timezone: str = "UTC"
+    location: str = ""
     prompt_file: str = "prompts/wingman.md"
     data_dir: str = "./data"
     log_dir: str = "./logs"

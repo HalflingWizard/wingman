@@ -1,6 +1,15 @@
 # Implementation plan
 
-Wingman 5.7.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.8.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.8 completed
+
+- Replaced the planning grid with Places, Saved ideas, Events, and Reminders tabs.
+- Added section search, add forms, record cards, edit forms, and current status badges.
+- Added explicit confirmation before dashboard hard deletion.
+- Kept deleted records hidden by default with a Show deleted control.
+- Added persisted local location settings alongside timezone settings.
+- Preserved city autocomplete and timezone selection in the local settings page.
 
 ## Phase 5.7 completed
 
@@ -595,7 +604,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.7.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 5.8.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 
@@ -701,7 +710,7 @@ Acceptance requirements
 
 Planning dashboard and local settings experience
 
-Status planned
+Status complete
 
 - Replace the four-panel planning page with Places, Saved ideas, Events, and Reminders tabs.
 - Add search, filters, add controls, edit controls, and record-specific forms.
