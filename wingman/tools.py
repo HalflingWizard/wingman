@@ -4,7 +4,7 @@
 # ruff: noqa: E501
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -40,7 +40,11 @@ from wingman.services import (
     mark_action_item,
     record_tool_execution,
     register_action_items,
+    update_event,
     update_memory,
+    update_place,
+    update_reminder,
+    update_saved_idea,
 )
 
 
@@ -86,6 +90,12 @@ class ProposeMemoryInput(BaseModel):
 class SearchPlanningInput(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     top_k: int = Field(default=5, ge=1, le=10)
+
+
+class UpdatePlanningItemInput(BaseModel):
+    item_type: Literal["place", "idea", "event", "reminder"]
+    item_id: str = Field(min_length=1, max_length=36)
+    changes: dict[str, Any] = Field(default_factory=dict)
 
 
 class CreatePlaceInput(BaseModel):
@@ -310,6 +320,83 @@ class MemoryToolExecutor:
                             }
                         )
                 output = {"records": records[: planning_data.top_k]}
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
+            if name == "update_planning_item":
+                update_data = UpdatePlanningItemInput.model_validate(arguments)
+                changes = {
+                    key: value for key, value in update_data.changes.items() if value is not None
+                }
+                if not changes:
+                    raise ValueError("At least one planning field must change")
+                allowed_fields = {
+                    "place": {
+                        "name",
+                        "address",
+                        "city",
+                        "description",
+                        "place_type",
+                        "status",
+                        "source_url",
+                        "atmosphere_tags",
+                    },
+                    "idea": {"title", "reason", "place_id", "status", "used"},
+                    "event": {
+                        "title",
+                        "event_type",
+                        "start_at",
+                        "end_at",
+                        "timezone",
+                        "status",
+                        "description",
+                        "emotional_context",
+                        "discussed",
+                        "place_id",
+                    },
+                    "reminder": {"title", "scheduled_at", "timezone", "status", "event_id"},
+                }
+                unsupported = set(changes) - allowed_fields[update_data.item_type]
+                if unsupported:
+                    raise ValueError(
+                        f"Unsupported fields for {update_data.item_type}: {', '.join(sorted(unsupported))}"
+                    )
+                for field in ("start_at", "end_at", "scheduled_at"):
+                    if field in changes:
+                        changes[field] = datetime.fromisoformat(str(changes[field]))
+                record: Any
+                if update_data.item_type == "place":
+                    record = update_place(self.session, self.user, update_data.item_id, **changes)
+                    title = record.name
+                elif update_data.item_type == "idea":
+                    record = update_saved_idea(
+                        self.session, self.user, update_data.item_id, **changes
+                    )
+                    title = record.title
+                elif update_data.item_type == "event":
+                    record = update_event(self.session, self.user, update_data.item_id, **changes)
+                    title = record.title
+                else:
+                    record = update_reminder(
+                        self.session, self.user, update_data.item_id, **changes
+                    )
+                    title = record.title
+                output = {
+                    "updated": True,
+                    "item_type": update_data.item_type,
+                    "item_id": record.id,
+                    "title": title,
+                    "verified": get_owned_planning_record(
+                        self.session, self.user, update_data.item_type, record.id
+                    )
+                    is not None,
+                }
                 record_tool_execution(
                     self.session,
                     self.user,
@@ -581,8 +668,8 @@ class MemoryToolExecutor:
                 )
                 return output
             elif name == "update_memory":
-                update_data = UpdateMemoryInput.model_validate(arguments)
-                fields = update_data.model_dump(exclude_none=True)
+                memory_update_data = UpdateMemoryInput.model_validate(arguments)
+                fields = memory_update_data.model_dump(exclude_none=True)
                 memory_id = fields.pop("memory_id")
                 if "memory_type" in fields:
                     fields["type"] = fields.pop("memory_type")

@@ -1,6 +1,16 @@
 # Implementation plan
 
-Wingman 5.5.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.6.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.6 completed
+
+- Reduced the active model tool set to direct memory and planning operations.
+- Removed proposal, confirmation, note-only, and action-registration tools from normal agent requests.
+- Added one ownership-checked `update_planning_item` tool for places, ideas, events, and reminders.
+- Added validated service updates for saved ideas, events, and reminders.
+- Kept the bounded eight-round primary-agent loop and parallel tool calls.
+- Added per-turn idempotency protection for repeated memory and planning writes.
+- Kept deletion under Telegram cards and dashboard controls.
 
 ## Phase 5.5 completed
 
@@ -576,7 +586,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.3.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 5.6.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 
@@ -631,7 +641,7 @@ Acceptance requirements
 
 Simplified tools and reliable orchestration
 
-Status planned
+Status complete
 
 - Keep `search_memories`, `create_memory`, and `update_memory` as the memory tools.
 - Remove proposal, confirmation, note-only, and action-registration tools from the active tool set.
@@ -642,7 +652,7 @@ Status planned
 - Use an async or otherwise safe embedding path when a model-generated search query reaches the hybrid retriever.
 - Keep one primary agent with a bounded six to eight round tool loop.
 - Execute parallel independent tool calls and return every result to the same agent.
-- Add idempotency keys for all memory and planning writes.
+- Add per-turn idempotency keys for all memory and planning writes.
 - Prevent duplicate writes when the same call is repeated during one turn.
 
 Acceptance requirements
@@ -651,6 +661,10 @@ Acceptance requirements
 - Multiple requested saves complete without proposal or confirmation loops.
 - Updates modify the intended owned record and do not create duplicates.
 - A maximum tool round failure is logged and reported clearly.
+
+Implementation note
+
+Legacy persistence and action-ledger helpers remain available for migration compatibility. They are not included in `AVAILABLE_TOOLS` and cannot be selected by normal model requests.
 
 ### Phase 5.7
 

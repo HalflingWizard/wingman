@@ -411,6 +411,27 @@ def create_saved_idea(
     return idea
 
 
+def update_saved_idea(session: Session, user: User, idea_id: str, **fields: Any) -> SavedIdea:
+    idea = session.get(SavedIdea, idea_id)
+    if idea is None or idea.user_id != user.id:
+        raise ValueError("Record does not exist")
+    allowed = {"title", "reason", "place_id", "status", "used"}
+    if set(fields) - allowed:
+        raise ValueError("Invalid saved idea fields")
+    if "title" in fields and (not str(fields["title"]).strip() or len(fields["title"]) > 200):
+        raise ValueError("Invalid saved idea title")
+    if fields.get("status", idea.status) == "deleted":
+        raise ValueError("Planning deletion is controlled by the owner")
+    if "place_id" in fields and fields["place_id"] is not None:
+        _owned(session, Place, user, str(fields["place_id"]))
+    for key, value in fields.items():
+        setattr(idea, key, value.strip() if isinstance(value, str) else value)
+    idea.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(idea)
+    return idea
+
+
 def list_saved_ideas(
     session: Session, user: User, include_deleted: bool = False
 ) -> list[SavedIdea]:
@@ -454,6 +475,36 @@ def create_event(
         place_id=place_id,
     )
     session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def update_event(session: Session, user: User, event_id: str, **fields: Any) -> Event:
+    event = session.get(Event, event_id)
+    if event is None or event.user_id != user.id:
+        raise ValueError("Record does not exist")
+    allowed = {
+        "title",
+        "event_type",
+        "start_at",
+        "end_at",
+        "timezone",
+        "status",
+        "description",
+        "emotional_context",
+        "discussed",
+        "place_id",
+    }
+    if set(fields) - allowed or fields.get("status", event.status) not in EVENT_STATUSES:
+        raise ValueError("Invalid event fields")
+    if "title" in fields and (not str(fields["title"]).strip() or len(fields["title"]) > 200):
+        raise ValueError("Invalid event title")
+    if "place_id" in fields and fields["place_id"] is not None:
+        _owned(session, Place, user, str(fields["place_id"]))
+    for key, value in fields.items():
+        setattr(event, key, value.strip() if isinstance(value, str) else value)
+    event.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(event)
     return event
@@ -505,6 +556,25 @@ def create_reminder(
         event_id=event_id,
     )
     session.add(reminder)
+    session.commit()
+    session.refresh(reminder)
+    return reminder
+
+
+def update_reminder(session: Session, user: User, reminder_id: str, **fields: Any) -> Reminder:
+    reminder = session.get(Reminder, reminder_id)
+    if reminder is None or reminder.user_id != user.id:
+        raise ValueError("Record does not exist")
+    allowed = {"title", "scheduled_at", "timezone", "status", "event_id"}
+    if set(fields) - allowed or fields.get("status", reminder.status) not in REMINDER_STATUSES:
+        raise ValueError("Invalid reminder fields")
+    if "title" in fields and (not str(fields["title"]).strip() or len(fields["title"]) > 200):
+        raise ValueError("Invalid reminder title")
+    if "event_id" in fields and fields["event_id"] is not None:
+        _owned(session, Event, user, str(fields["event_id"]))
+    for key, value in fields.items():
+        setattr(reminder, key, value.strip() if isinstance(value, str) else value)
+    reminder.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(reminder)
     return reminder

@@ -4,7 +4,7 @@
 
 Wingman is a private Telegram relationship assistant for one owner. It helps you remember useful details, understand ongoing conversations, plan thoughtful dates, and review how an AI response was produced.
 
-The current release is Wingman 5.5.0.
+The current release is Wingman 5.6.0.
 
 It is designed to feel like a natural conversation with a thoughtful friend. Memory tools, retrieval, prompts, and diagnostics work behind the scenes. Telegram stays focused on the conversation, while the local dashboard gives you control and transparency.
 
@@ -14,7 +14,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Keep memory notes with supporting context and source messages
 - Retrieve relevant memories using lexical and semantic matching
 - Keep recent conversation history and rolling summaries
-- Suggest uncertain memories before saving them
+- Save useful durable memories without proposal loops
 - Plan places, ideas, events, and one-time reminders
 - Search and save planning records conversationally when the owner clearly asks
 - Send due reminders through Telegram
@@ -160,7 +160,7 @@ The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLit
 - [Implementation history](IMPLEMENTATION_PLAN.md)
 - [Controlled development loop](DEVELOPMENT_LOOP.md)
 - [Development task ledger](DEVELOPMENT_TASKS.json)
-- [Version 5.5.0 release notes](RELEASE_NOTES_v5.5.0.md)
+- [Version 5.6.0 release notes](RELEASE_NOTES_v5.6.0.md)
 
 ## License
 

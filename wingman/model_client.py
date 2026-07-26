@@ -31,6 +31,8 @@ def build_agent_instructions(
         "temporary plans, or minor conversation details. Use update_memory when new information "
         "belongs to an existing memory. Use planning tools when the owner clearly wants a place, "
         "idea, event, or reminder saved. Search planning records before creating duplicates. "
+        "Use update_planning_item when the owner corrects, annotates, reschedules, or adds "
+        "feedback to an existing planning record. Do not use tools to delete records. "
         "Places may have unknown addresses or cities. Do not invent missing dates or times. "
         "When one message contains several distinct durable details, handle each safe detail and "
         "use multiple tool calls when appropriate. Keep the final reply natural and never mention "
@@ -182,10 +184,6 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {
-                    "type": ["string", "null"],
-                    "description": "The registered action ID when this save is part of a group.",
-                },
                 "statement": {
                     "type": "string",
                     "minLength": 1,
@@ -212,7 +210,6 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": [
-                "action_id",
                 "statement",
                 "memory_type",
                 "status",
@@ -231,15 +228,11 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
             "explicitly asks to remember it. Use observed for a detail reported by the owner "
             "but not confirmed by the person discussed, inferred for a cautious conclusion, "
             "and confirmed only when the owner clearly confirms it. Search first to avoid a "
-            "duplicate, and use add_memory_note when the detail belongs to an existing memory."
+            "duplicate. Use update_memory when new information belongs to an existing memory."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {
-                    "type": ["string", "null"],
-                    "description": "The registered action ID when this save is part of a group.",
-                },
                 "statement": {
                     "type": "string",
                     "minLength": 1,
@@ -269,7 +262,6 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": [
-                "action_id",
                 "statement",
                 "memory_type",
                 "status",
@@ -387,7 +379,6 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {"type": ["string", "null"]},
                 "name": {"type": "string", "minLength": 1, "maxLength": 200},
                 "address": {"type": "string", "maxLength": 500},
                 "city": {"type": "string", "maxLength": 120},
@@ -396,7 +387,6 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
                 "atmosphere_tags": {"type": "string", "maxLength": 500},
             },
             "required": [
-                "action_id",
                 "name",
                 "address",
                 "city",
@@ -415,12 +405,11 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "reason": {"type": "string", "maxLength": 4000},
                 "place_id": {"type": ["string", "null"]},
             },
-            "required": ["action_id", "title", "reason", "place_id"],
+            "required": ["title", "reason", "place_id"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -432,7 +421,6 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "start_at": {"type": "string", "minLength": 1, "maxLength": 80},
                 "event_type": {"type": "string", "maxLength": 40},
@@ -441,7 +429,6 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
                 "place_id": {"type": ["string", "null"]},
             },
             "required": [
-                "action_id",
                 "title",
                 "start_at",
                 "event_type",
@@ -460,20 +447,107 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "scheduled_at": {"type": "string", "minLength": 1, "maxLength": 80},
                 "timezone": {"type": "string", "maxLength": 80},
                 "event_id": {"type": ["string", "null"]},
             },
-            "required": ["action_id", "title", "scheduled_at", "timezone", "event_id"],
+            "required": ["title", "scheduled_at", "timezone", "event_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "update_planning_item",
+        "description": (
+            "Update one owned place, saved idea, event, or reminder. Use this when the owner "
+            "corrects details, adds information, records feedback, or reschedules an item. "
+            "Do not use it to delete records. The changes object must contain null for fields "
+            "that are not changing. Places support name, address, city, description, place_type, "
+            "status, source_url, and atmosphere_tags. Ideas support title, reason, place_id, "
+            "status, and used. Events support title, event_type, start_at, end_at, timezone, "
+            "status, description, emotional_context, discussed, and place_id. Reminders support "
+            "title, scheduled_at, timezone, status, and event_id. Use ISO 8601 dates."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "item_type": {
+                    "type": "string",
+                    "enum": ["place", "idea", "event", "reminder"],
+                },
+                "item_id": {"type": "string", "minLength": 1, "maxLength": 36},
+                "changes": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": ["string", "null"]},
+                        "title": {"type": ["string", "null"]},
+                        "address": {"type": ["string", "null"]},
+                        "city": {"type": ["string", "null"]},
+                        "description": {"type": ["string", "null"]},
+                        "place_type": {"type": ["string", "null"]},
+                        "status": {"type": ["string", "null"]},
+                        "source_url": {"type": ["string", "null"]},
+                        "atmosphere_tags": {"type": ["string", "null"]},
+                        "reason": {"type": ["string", "null"]},
+                        "place_id": {"type": ["string", "null"]},
+                        "used": {"type": ["boolean", "null"]},
+                        "event_type": {"type": ["string", "null"]},
+                        "start_at": {"type": ["string", "null"]},
+                        "end_at": {"type": ["string", "null"]},
+                        "timezone": {"type": ["string", "null"]},
+                        "emotional_context": {"type": ["string", "null"]},
+                        "discussed": {"type": ["boolean", "null"]},
+                        "scheduled_at": {"type": ["string", "null"]},
+                        "event_id": {"type": ["string", "null"]},
+                    },
+                    "required": [
+                        "name",
+                        "title",
+                        "address",
+                        "city",
+                        "description",
+                        "place_type",
+                        "status",
+                        "source_url",
+                        "atmosphere_tags",
+                        "reason",
+                        "place_id",
+                        "used",
+                        "event_type",
+                        "start_at",
+                        "end_at",
+                        "timezone",
+                        "emotional_context",
+                        "discussed",
+                        "scheduled_at",
+                        "event_id",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["item_type", "item_id", "changes"],
             "additionalProperties": False,
         },
         "strict": True,
     },
 ]
 
-AVAILABLE_TOOLS = MEMORY_TOOLS[2:] + MEMORY_TOOLS[:2] + PLANNING_TOOLS
+ACTIVE_TOOL_NAMES = {
+    "search_memories",
+    "create_memory",
+    "update_memory",
+    "search_planning",
+    "create_place",
+    "create_saved_idea",
+    "create_event",
+    "create_reminder",
+    "update_planning_item",
+}
+AVAILABLE_TOOLS = [
+    tool for tool in MEMORY_TOOLS + PLANNING_TOOLS if tool["name"] in ACTIVE_TOOL_NAMES
+]
 
 
 class ModelClient:
@@ -657,7 +731,16 @@ class ModelClient:
         self.last_request_snapshot = snapshot_request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:
-            action_tracking_active = False
+            write_tool_names = {
+                "create_memory",
+                "update_memory",
+                "create_place",
+                "create_saved_idea",
+                "create_event",
+                "create_reminder",
+                "update_planning_item",
+            }
+            write_results: dict[str, dict[str, Any]] = {}
             for _ in range(8):
                 calls = [
                     item
@@ -665,50 +748,15 @@ class ModelClient:
                     if getattr(item, "type", None) == "function_call"
                 ]
                 if not calls:
-                    if not action_tracking_active:
-                        break
-                    try:
-                        ledger_result = tool_executor("__action_ledger__", {})
-                        ledger = (
-                            ledger_result
-                            if isinstance(ledger_result, dict)
-                            and "continue_required" in ledger_result
-                            else {"continue_required": False}
-                        )
-                    except Exception:
-                        ledger = {"continue_required": False}
-                    if not ledger.get("continue_required"):
-                        break
-                    follow_up = list(response.output)
-                    follow_up.append(
-                        {
-                            "role": "developer",
-                            "content": (
-                                "The action ledger still has pending requested actions. "
-                                "Continue using the available tools until every pending action "
-                                "is completed or needs clarification. Do not ask the owner to "
-                                "repeat the same request. Ledger:\n"
-                                + json.dumps(ledger, sort_keys=True)
-                            ),
-                        }
-                    )
-                    response = await self.client.responses.create(
-                        **request | {"input": cast(Any, follow_up), "tool_choice": "auto"}
-                    )
-                    continue
+                    break
                 follow_up = list(response.output)
                 for call in calls:
                     arguments: dict[str, Any] = {}
-                    action_id: str | None = None
                     try:
                         parsed = json.loads(call.arguments)
                         if not isinstance(parsed, dict):
                             raise ValueError("Tool arguments must be a JSON object")
                         arguments = parsed
-                        raw_action_id = arguments.get("action_id")
-                        action_id = str(raw_action_id) if raw_action_id else None
-                        if call.name == "register_actions" or action_id:
-                            action_tracking_active = True
                         if call.name == "search_memories" and query_embedding_provider:
                             query = arguments.get("query")
                             if isinstance(query, str) and query.strip():
@@ -718,32 +766,28 @@ class ModelClient:
                                     )
                                 except Exception:
                                     pass
-                        result = tool_executor(call.name, arguments)
-                        output = {"ok": True, "result": result}
+                        idempotency_key = ""
+                        if call.name in write_tool_names:
+                            normalized = {
+                                key: value
+                                for key, value in arguments.items()
+                                if key != "_query_embedding"
+                            }
+                            idempotency_key = (
+                                call.name
+                                + ":"
+                                + json.dumps(normalized, sort_keys=True, default=str)
+                            )
+                        if idempotency_key and idempotency_key in write_results:
+                            output = dict(write_results[idempotency_key])
+                            output["idempotent_replay"] = True
+                        else:
+                            result = tool_executor(call.name, arguments)
+                            output = {"ok": True, "result": result}
+                            if idempotency_key:
+                                write_results[idempotency_key] = output
                     except Exception as exc:
                         output = {"ok": False, "error": str(exc)}
-                    if action_id:
-                        action_status = "failed" if not output["ok"] else "completed"
-                        result_data = output.get("result")
-                        if isinstance(result_data, dict):
-                            if result_data.get("duplicate"):
-                                action_status = "duplicate"
-                            elif result_data.get("status") == "awaiting_confirmation":
-                                action_status = "awaiting_confirmation"
-                            elif result_data.get("needs_clarification"):
-                                action_status = "needs_clarification"
-                        try:
-                            tool_executor(
-                                "__mark_action__",
-                                {
-                                    "action_id": action_id,
-                                    "status": action_status,
-                                    "result": output.get("result"),
-                                    "error": output.get("error"),
-                                },
-                            )
-                        except Exception:
-                            pass
                     self.last_tool_trace.append(
                         {"name": call.name, "arguments": arguments, "output": output}
                     )

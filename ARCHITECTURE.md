@@ -1,6 +1,6 @@
 # Architecture
 
-Wingman 5.5.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
+Wingman 5.6.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
 The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
@@ -12,8 +12,8 @@ The application is designed for one trusted owner on one machine. It favors clea
 4. Text is normalized directly, while voice audio is downloaded into memory and transcribed.
 5. The conversation, summary, pending state, and no preloaded memories are loaded.
 6. The context builder creates separate static instructions, dynamic context, and recent message history.
-7. The OpenAI Responses API receives the request and may request multiple validated memory actions.
-8. The application validates and executes allowed tool calls, records them, and continues the bounded tool loop.
+7. The OpenAI Responses API receives the request and may request multiple validated memory or planning actions.
+8. The application validates and executes the simplified active tool set, prevents repeated writes within the turn, records results, and continues the bounded tool loop.
 9. The assistant response is stored and sent to Telegram.
 
 The web dashboard reads the same local state and exposes controls for memories, context, planning, diagnostics, settings, backups, import, export, and bot lifecycle.
@@ -22,7 +22,7 @@ The web dashboard reads the same local state and exposes controls for memories, 
 
 Static context contains owner-editable conversation guidance from `prompts/wingman.md`, followed by application-controlled safety, privacy, memory, identity, and time rules. The editable guidance controls style only and cannot override application policy.
 
-Dynamic context is built for each message. It contains recent messages, rolling conversation summaries, pending memory proposals, and action state. The model uses search tools when it needs relevant saved memories or planning records. The builder keeps the result within the configured context budget.
+Dynamic context is built for each message. It contains recent messages, rolling conversation summaries, and relevant planning state. The model uses search tools when it needs saved memories or planning records. The builder keeps the result within the configured context budget.
 
 Recent messages remain separate from dynamic context. The current user message appears once in the API request. The API-call inspector stores these layers so the owner can understand what the model received.
 
@@ -32,13 +32,13 @@ Memories belong to the configured owner and support types, statuses, confidence,
 
 Retrieval is model-directed. When the model calls `search_memories`, the application embeds the query and combines cosine similarity with normalized lexical matching. Deterministic importance, confidence, and recency weighting ranks relevant candidates, while minimum relevance thresholds reject weak name-only matches. Query data, candidate text, score components, notes, and source IDs are recorded in retrieval logs for dashboard inspection. Lexical retrieval remains available when an embedding is missing or fails.
 
-Uncertain personal observations can become pending proposals. The owner can accept or dismiss a proposal. Memory tools are application-controlled, ownership-checked, schema-validated, audited, and bounded by the model loop.
+The active agent saves useful durable observations directly. Memory tools are application-controlled, ownership-checked, schema-validated, audited, and bounded by the model loop. Deletion remains an owner-controlled Telegram card or dashboard action.
 
 ## Planning
 
 Places, saved ideas, events, and one-time reminders use relational tables. The model searches planning records when a request needs them. A small reminder worker sends due reminders through Telegram and records delivery state.
 
-The model can use validated planning tools to search and create places, saved ideas, events, and reminders. Planning tools check ownership, reject invalid links and dates, avoid exact duplicates, and allow places to be saved before an address or city is known. More complex planning updates remain explicit dashboard actions until their conversational policy is designed.
+The model can use validated planning tools to search, create, and update places, saved ideas, events, and reminders. Planning tools check ownership, reject invalid links and dates, avoid exact duplicates, and allow places to be saved before an address or city is known. Deletion remains an owner-controlled Telegram card or dashboard action.
 
 ## Dashboard
 

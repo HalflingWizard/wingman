@@ -1,8 +1,8 @@
 # Build a local Telegram wingman agent with a web administration interface
 
-The completed application is Wingman 5.5.0. This document describes the product requirements that define the implementation.
+The completed application is Wingman 5.6.0. This document describes the product requirements that define the implementation.
 
-The current implementation also includes controlled model memory and planning tools, memory proposals, source-linked notes, rolling conversation summaries, retrieval inspection, a responsive dashboard, editable context guidance, local settings editing, JSON import and export, backups, lifecycle controls, port fallback, temporary attachment handling, and release diagnostics.
+The current implementation also includes controlled model memory and planning tools, source-linked records, rolling conversation summaries, retrieval inspection, a responsive dashboard, editable context guidance, local settings editing, JSON import and export, backups, lifecycle controls, port fallback, temporary attachment handling, and release diagnostics.
 
 You are building a complete but intentionally small self-hosted application.
 
@@ -985,22 +985,20 @@ Implement a small validated tool set.
 ### Memory tools
 
 ```text
+search_memories
 create_memory
 update_memory
-add_memory_note
-delete_memory
-confirm_memory
-merge_memories
 ```
 
 ### Place and idea tools
 
 ```text
+search_planning
 create_place
-update_place
-delete_place
-save_date_idea
-mark_place_visited
+create_saved_idea
+create_event
+create_reminder
+update_planning_item
 ```
 
 ### Event tools
