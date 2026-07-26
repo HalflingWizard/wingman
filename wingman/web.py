@@ -46,6 +46,7 @@ from wingman.system import (
     database_diagnostics,
     export_user_data,
     import_user_data,
+    repository_version,
     safe_update,
 )
 
@@ -70,10 +71,46 @@ NAV_ITEMS = (
     ("planning", "/planning", "calendar-days", "Planning"),
     ("api-calls", "/api-calls", "code", "API calls"),
     ("logs", "/logs", "list-check", "Logs"),
+    ("usage", "/usage", "chart-column", "Usage"),
     ("retrieval", "/retrieval", "magnifying-glass-chart", "Retrieval"),
     ("settings", "/settings", "sliders", "Settings"),
     ("system", "/system", "gear", "System"),
 )
+
+PRICING_PER_MILLION = {
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-4o-mini-transcribe": (1.25, 5.00),
+    "text-embedding-3-small": (0.02, 0.00),
+}
+
+
+def usage_operation(run: AgentRun) -> str:
+    try:
+        request = json.loads(run.request_snapshot or "{}")
+    except json.JSONDecodeError:
+        request = {}
+    if request.get("type") == "rolling_summary":
+        return "summary"
+    if request.get("type") == "audio_transcription":
+        return "transcription"
+    if request.get("video_diagnostics", {}).get("count", 0):
+        return "video"
+    if request.get("document_diagnostics", {}).get("count", 0):
+        return "documents"
+    if request.get("image_diagnostics", {}).get("count", 0):
+        return "images"
+    return "replies"
+
+
+def usage_cost(run: AgentRun) -> float | None:
+    rates = PRICING_PER_MILLION.get(run.model_name)
+    if rates is None or run.input_tokens is None and run.output_tokens is None:
+        return None
+    return round(
+        ((run.input_tokens or 0) * rates[0] + (run.output_tokens or 0) * rates[1]) / 1_000_000,
+        8,
+    )
 
 
 def navigation(active: str = "") -> str:
@@ -134,6 +171,7 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         ".code-panel{border:1px solid #d8dfeb;border-radius:.75rem;margin:1rem 0;overflow:hidden;background:#0d1117}.code-toolbar{display:flex;justify-content:space-between;"
         "align-items:center;padding:.55rem .75rem;background:#192231;color:#e5edf9;font-size:.82rem}.code-toolbar button{padding:.3rem .6rem;background:#34425b;font-size:.75rem}"
         ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
+        ".usage-day{display:grid;grid-template-columns:7rem 1fr 6rem;gap:.7rem;align-items:center;margin:.75rem 0;font-size:.82rem}.usage-bar{height:1rem;display:flex;overflow:hidden;border-radius:999px;background:#eef1f7}.usage-bar span{height:100%}table{width:100%;border-collapse:collapse;font-size:.83rem}th,td{text-align:left;padding:.65rem;border-bottom:1px solid #edf0f5;white-space:nowrap}th{color:#53627b;background:#f7f9fc}"
         ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
         "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
         "</style><script>"
@@ -238,11 +276,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             database_info = database_diagnostics(active_settings, session, user)
         read_at = datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+        revision = repository_version()
         body = (
             f"<header class='page-header'><div><p class='eyebrow'>Private workspace</p>"
             f"<h1>Good to see you, {escape(active_settings.user_name)}</h1>"
             "<p class='muted'>Keep the important details close and the conversation natural.</p></div>"
             f"<div class='stack'><span class='badge'><span class='status-dot'></span>Wingman {__version__}</span>"
+            f"<span class='muted'>Commit {escape(revision['commit'][:12])}</span>"
             "<a class='button button-secondary' href='/?refresh=1'><i class='fa-solid fa-arrows-rotate'></i> Refresh</a></div></header>"
             "<section class='summary-grid'>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-brain'></i></div><span class='stat-value'>{memory_count}</span><span class='stat-label'>Saved memories</span></div>"
@@ -252,6 +292,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<span class='muted'>Read at {escape(read_at)}</span></div>"
             f"<p class='muted'>This view uses the configured database and owner scope. It currently contains {database_info['memory_count']} memories and {database_info['place_count']} places.</p>"
             f"<p class='muted'>Database path {escape(str(database_info['database_path']))}</p></section>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-code-branch'></i> Loaded repository version</h2>"
+            f"<span class='badge'>{escape(revision['branch'] or 'detached')}</span></div>"
+            f"<p class='muted'><strong>{escape(revision['commit'])}</strong></p>"
+            f"<p>{escape(revision['message'])}</p></section>"
             "<section class='panel'><div class='panel-header'><div><p class='eyebrow'>Workspace tools</p>"
             "<h2>Explore Wingman</h2></div><span class='muted'>Everything stays on this machine</span></div>"
             "<div class='quick-grid'>"
@@ -798,6 +842,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<section class='record-list'>" + "".join(cards) + "</section>"
         )
         return page_shell("Latest API calls", body, "api-calls")
+
+    @app.get("/usage", response_class=HTMLResponse)
+    def usage() -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            runs = list(
+                session.scalars(
+                    select(AgentRun)
+                    .join(Conversation, AgentRun.conversation_id == Conversation.id)
+                    .where(Conversation.user_id == user.id)
+                    .order_by(AgentRun.created_at.asc())
+                )
+            )
+        records: list[dict[str, Any]] = []
+        daily: dict[str, dict[str, float]] = {}
+        for run in runs:
+            operation = usage_operation(run)
+            cost = usage_cost(run)
+            day = run.created_at.date().isoformat()
+            daily.setdefault(day, {}).setdefault(operation, 0.0)
+            daily[day][operation] += cost or 0.0
+            records.append(
+                {
+                    "date": run.created_at.strftime("%Y-%m-%d %H:%M"),
+                    "operation": operation,
+                    "model": run.model_name,
+                    "input": run.input_tokens,
+                    "output": run.output_tokens,
+                    "cost": cost,
+                    "status": run.status,
+                }
+            )
+        total_cost = sum(item["cost"] or 0 for item in records)
+        total_input = sum(item["input"] or 0 for item in records)
+        total_output = sum(item["output"] or 0 for item in records)
+        colors = {
+            "replies": "#5968df",
+            "summary": "#7c5ce5",
+            "transcription": "#20a67a",
+            "images": "#e49a3a",
+            "documents": "#d65c86",
+            "video": "#4b9ac7",
+        }
+        bars = []
+        for day, values in daily.items():
+            total = sum(values.values())
+            segments = []
+            for operation, value in values.items():
+                width = (value / total * 100) if total else 0
+                segments.append(
+                    f"<span title='{escape(operation)} ${value:.8f}' style='width:{width:.2f}%;background:{colors.get(operation, '#8792a8')}'></span>"
+                )
+            bars.append(
+                f"<div class='usage-day'><span>{escape(day)}</span><div class='usage-bar'>{''.join(segments) or '<span style="width:100%;background:#d8deea"></span>'}</div><span>${total:.6f}</span></div>"
+            )
+        rows = []
+        for item in reversed(records[-100:]):
+            cost_text = f"${item['cost']:.8f}" if item["cost"] is not None else "Not estimated"
+            rows.append(
+                "<tr>"
+                f"<td>{escape(item['date'])}</td><td>{escape(item['operation'])}</td>"
+                f"<td>{escape(item['model'])}</td><td>{item['input'] if item['input'] is not None else 'unknown'}</td>"
+                f"<td>{item['output'] if item['output'] is not None else 'unknown'}</td><td>{cost_text}</td>"
+                f"<td>{escape(item['status'])}</td></tr>"
+            )
+        body = (
+            "<header class='page-header'><div><p class='eyebrow'>Usage accounting</p><h1>Cost and usage</h1>"
+            "<p class='muted'>Reported token usage is shown when the provider returns it. Media operations without token usage remain visible as not estimated.</p></div></header>"
+            "<div class='summary-grid'>"
+            f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-dollar-sign'></i></div><span class='stat-value'>${total_cost:.6f}</span><span class='stat-label'>Estimated cost</span></div>"
+            f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-arrow-down'></i></div><span class='stat-value'>{total_input:,}</span><span class='stat-label'>Input tokens</span></div>"
+            f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-arrow-up'></i></div><span class='stat-value'>{total_output:,}</span><span class='stat-label'>Output tokens</span></div></div>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-chart-column'></i> Daily cost</h2>"
+            "<span class='muted'>Stacked by operation</span></div>"
+            + ("".join(bars) or "<p class='muted'>No usage recorded yet.</p>")
+            + "<p class='muted'>Replies, summaries, transcription, images, documents, and video are separated when diagnostics identify them.</p></section>"
+            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-table-list'></i> Operation details</h2>"
+            "<div style='overflow:auto'><table><thead><tr><th>Date</th><th>Operation</th><th>Model</th><th>Input</th><th>Output</th><th>Cost</th><th>Status</th></tr></thead><tbody>"
+            + ("".join(rows) or "<tr><td colspan='7'>No usage recorded yet.</td></tr>")
+            + "</tbody></table></div></section>"
+        )
+        return page_shell("Cost and usage", body, "usage")
 
     @app.get("/conversations", response_class=HTMLResponse)
     def conversations() -> str:

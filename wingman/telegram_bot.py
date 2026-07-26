@@ -812,18 +812,23 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     if item.id == summary.summarized_through_message_id:
                         summary_start = index + 1
                         break
-            old_messages = conversation.messages[summary_start : -settings.recent_message_limit]
-            summary_needed = len(conversation.messages) > settings.summary_threshold
+            if summary.summarized_through_message_id:
+                summary_messages = conversation.messages[
+                    summary_start : -settings.recent_message_limit
+                ]
+            else:
+                summary_messages = conversation.messages[: -settings.recent_message_limit]
+            summary_needed = len(summary_messages) > 0
             existing_summary = summary.summary_text
-            summary_message_ids = [item.id for item in old_messages]
-            summary_through_id = old_messages[-1].id if old_messages else None
-        if model_client is not None and summary_needed and old_messages:
+            summary_message_ids = [item.id for item in summary_messages]
+            summary_through_id = summary_messages[-1].id if summary_messages else None
+        if model_client is not None and summary_needed:
             summary_started = perf_counter()
             summary_request = json.dumps(
                 {
                     "type": "rolling_summary",
                     "existing_summary": existing_summary,
-                    "messages": [(item.sender, item.text) for item in old_messages],
+                    "messages": [(item.sender, item.text) for item in summary_messages],
                 },
                 sort_keys=True,
             )
@@ -841,7 +846,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     message,
                     model_client.summarize(
                         existing_summary,
-                        [(item.sender, item.text) for item in old_messages],
+                        [(item.sender, item.text) for item in summary_messages],
                     ),
                 )
                 with sessions() as session:

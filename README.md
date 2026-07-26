@@ -26,6 +26,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Process supported videos by transcribing audio and sampling five visual frames
 - Keep temporary attachment metadata for traceability while deleting local input files after processing
 - Inspect prompts, dynamic context, tool calls, retrieval scores, token use, latency, and errors
+- View loaded Git commit information and estimated model usage in the dashboard
 
 ## Telegram experience
 

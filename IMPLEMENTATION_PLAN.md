@@ -386,7 +386,7 @@ Delivered
 
 Cost and usage dashboard
 
-Status pending
+Status complete
 
 - Create a usage ledger for every model operation, including conversation replies, summaries, embeddings, transcription, image processing, document processing, and video processing.
 - Record operation type, model, provider, timestamp, input and output tokens when available, media units, pricing version, estimated cost, and whether the value is reported or estimated.
@@ -395,6 +395,15 @@ Status pending
 - Show a detailed table beneath the chart so every total can be audited back to an operation.
 - Keep pricing data in a versioned application-controlled table and make unknown pricing visible instead of silently reporting zero.
 - Never include API keys, raw media, or sensitive prompt content in the usage ledger.
+
+Delivered
+
+- Added a dashboard usage page with daily stacked cost bars and operation details.
+- Added token totals, model grouping, operation classification, and current pricing estimates.
+- Marked media operations without provider token counts as visible but not estimated.
+- Added loaded repository commit, branch, and commit message information to the dashboard.
+- Reworked rolling summaries around a ten-message short-term window and displaced-message boundary.
+- Removed the old unsupported-media wording from the active Telegram message path.
 
 ### Phase 3.9
 

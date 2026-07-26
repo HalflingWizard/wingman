@@ -23,6 +23,36 @@ from wingman.models import (
 )
 
 
+def repository_version() -> dict[str, str]:
+    """Return the loaded source revision without failing when Git is unavailable."""
+    root = Path(__file__).resolve().parent.parent
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        message = subprocess.run(
+            ["git", "log", "-1", "--pretty=%s"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": "unavailable", "message": "Git metadata unavailable", "branch": ""}
+    return {"commit": commit, "message": message, "branch": branch}
+
+
 def database_diagnostics(settings: Settings, session: Session, user: User) -> dict[str, object]:
     """Return safe database and owner-scope information for local diagnostics."""
     if settings.database_url.startswith("sqlite:///"):
