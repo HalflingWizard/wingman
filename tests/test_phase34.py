@@ -81,3 +81,30 @@ def test_planning_tool_results_are_database_verified(tmp_path):
         )
     assert place["verified"] is True
     assert event["verified"] is True
+
+
+def test_logs_page_shows_tool_inputs_outputs_and_errors(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'test.db'}",
+        telegram_owner_id=42,
+    )
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        user = User(telegram_user_id=42, name="Owner")
+        session.add(user)
+        session.commit()
+        executor = MemoryToolExecutor(session, user)
+        executor.execute(
+            "create_place",
+            {"name": "Soyu", "address": "", "city": "", "description": "Cafe"},
+        )
+        try:
+            executor.execute("create_place", {"name": ""})
+        except ValueError:
+            pass
+    response = TestClient(create_app(settings)).get("/logs")
+    assert response.status_code == 200
+    assert "Tool executions" in response.text
+    assert "JSON input" in response.text
+    assert "JSON output" in response.text
+    assert "verified" in response.text

@@ -20,7 +20,7 @@ from wingman import __version__
 from wingman.config import Settings, get_settings, save_runtime_settings
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, schedule_restart, set_paused
-from wingman.models import AgentRun, Conversation, ConversationSummary, User
+from wingman.models import AgentRun, Conversation, ConversationSummary, ToolExecution, User
 from wingman.prompting import load_prompt, save_prompt
 from wingman.services import (
     add_memory_note,
@@ -69,6 +69,7 @@ NAV_ITEMS = (
     ("conversations", "/conversations", "comments", "Conversations"),
     ("planning", "/planning", "calendar-days", "Planning"),
     ("api-calls", "/api-calls", "code", "API calls"),
+    ("logs", "/logs", "list-check", "Logs"),
     ("retrieval", "/retrieval", "magnifying-glass-chart", "Retrieval"),
     ("settings", "/settings", "sliders", "Settings"),
     ("system", "/system", "gear", "System"),
@@ -143,6 +144,21 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         + navigation(active)
         + f"<main class='main'>{body}</main></div></body></html>"
     )
+
+
+def redact_diagnostic(value: object) -> object:
+    """Redact common secret fields before diagnostic data reaches the browser."""
+    secret_words = ("key", "token", "secret", "password", "authorization")
+    if isinstance(value, dict):
+        return {
+            key: "[redacted]"
+            if any(word in key.casefold() for word in secret_words)
+            else redact_diagnostic(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_diagnostic(item) for item in value]
+    return value
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -243,6 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<a class='quick-card' href='/planning'><i class='fa-solid fa-calendar-days'></i><strong>Planning</strong><small>Keep places, ideas, events, and reminders together.</small></a>"
             "<a class='quick-card' href='/retrieval'><i class='fa-solid fa-magnifying-glass-chart'></i><strong>Retrieval</strong><small>See why saved context was selected.</small></a>"
             "<a class='quick-card' href='/api-calls'><i class='fa-solid fa-code'></i><strong>API calls</strong><small>Inspect complete requests and responses.</small></a>"
+            "<a class='quick-card' href='/logs'><i class='fa-solid fa-list-check'></i><strong>Logs</strong><small>Trace tool calls, results, and persistence checks.</small></a>"
             "<a class='quick-card' href='/conversations'><i class='fa-solid fa-comments'></i><strong>Conversations</strong><small>Read recent messages and summaries.</small></a>"
             "<a class='quick-card' href='/health'><i class='fa-solid fa-heart-pulse'></i><strong>Health</strong><small>Check local service status.</small></a>"
             "</div></section>"
@@ -663,6 +680,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user = web_user(session)
             create_reminder(session, user, title, parse_datetime(scheduled_at))
         return planning()
+
+    @app.get("/logs", response_class=HTMLResponse)
+    def logs() -> str:
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            executions = list(
+                session.scalars(
+                    select(ToolExecution)
+                    .where(ToolExecution.user_id == user.id)
+                    .order_by(ToolExecution.created_at.desc())
+                    .limit(100)
+                )
+            )
+            runs = list(
+                session.scalars(
+                    select(AgentRun)
+                    .join(Conversation, AgentRun.conversation_id == Conversation.id)
+                    .where(Conversation.user_id == user.id)
+                    .order_by(AgentRun.created_at.desc())
+                    .limit(30)
+                )
+            )
+        execution_cards = []
+        for execution in executions:
+            try:
+                input_data = redact_diagnostic(json.loads(execution.input_json))
+                input_text = json.dumps(input_data, indent=2, ensure_ascii=False)
+            except json.JSONDecodeError:
+                input_text = execution.input_json
+            try:
+                output_data = redact_diagnostic(json.loads(execution.output_json or "{}"))
+                output_text = json.dumps(output_data, indent=2, ensure_ascii=False)
+            except json.JSONDecodeError:
+                output_text = execution.output_json or ""
+            execution_cards.append(
+                "<article class='record'>"
+                f"<div class='record-top'><h2>{escape(execution.tool_name)}</h2>"
+                f"<span class='badge'>{escape(execution.status)}</span></div>"
+                f"<p class='muted'>{escape(execution.created_at.isoformat())}. Agent run {escape(execution.agent_run_id or 'none')}</p>"
+                f"<h3>Tool input</h3>{code_panel('JSON input', input_text, 260)}"
+                f"<h3>Tool output</h3>{code_panel('JSON output', output_text, 260)}"
+                f"<p class='muted'>Error {escape(execution.error or 'none')}</p></article>"
+            )
+        run_cards = []
+        for run in runs:
+            response_data = run.response_snapshot or ""
+            try:
+                response_data = json.dumps(
+                    redact_diagnostic(json.loads(response_data)),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            except json.JSONDecodeError:
+                pass
+            run_cards.append(
+                "<article class='record'>"
+                f"<div class='record-top'><h2>{escape(run.model_name)}</h2>"
+                f"<span class='badge'>{escape(run.status)}</span></div>"
+                f"<p class='muted'>{escape(run.created_at.isoformat())}. Error {escape(run.error or 'none')}</p>"
+                f"{code_panel('Agent response summary', response_data, 300)}</article>"
+            )
+        body = (
+            "<header class='page-header'><div><p class='eyebrow'>Runtime diagnostics</p><h1>Logs</h1>"
+            "<p class='muted'>Inspect what tools were called, what they returned, and whether persistence was verified. Secrets are redacted.</p></div></header>"
+            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-list-check'></i> Tool executions</h2>"
+            + ("".join(execution_cards) or "<p class='muted'>No tool executions recorded yet.</p>")
+            + "</section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-robot'></i> Agent runs</h2>"
+            + ("".join(run_cards) or "<p class='muted'>No agent runs recorded yet.</p>")
+            + "</section>"
+        )
+        return page_shell("Logs", body, "logs")
 
     @app.get("/api-calls", response_class=HTMLResponse)
     def api_calls() -> str:
