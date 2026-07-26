@@ -26,6 +26,8 @@ def test_dashboard_uses_consistent_refined_layout(tmp_path):
     planning = client.get("/planning").text
     conversations = client.get("/conversations").text
 
+    favicon = client.get("/assets/favicon/favicon.svg")
+    assert favicon.status_code == 200
     assert "class='record-statement'" in memories
     assert "<textarea name='statement'" in memories
     assert "class='planning-grid'" in planning

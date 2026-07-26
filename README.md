@@ -1,3 +1,5 @@
+![Wingman banner](assets/branding/readme-banner.png)
+
 # Wingman
 
 Wingman is a private Telegram relationship assistant for one owner. It helps you remember useful details, understand ongoing conversations, plan thoughtful dates, and review how an AI response was produced.
@@ -140,7 +142,7 @@ The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLit
 - [Architecture](ARCHITECTURE.md)
 - [Security notes](SECURITY.md)
 - [Implementation history](IMPLEMENTATION_PLAN.md)
-- [Version 2.0.0 release notes](RELEASE_NOTES_v2.0.0.md)
+- [Version 3.0.0 release notes](RELEASE_NOTES_v3.0.0.md)
 
 ## License
 

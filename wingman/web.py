@@ -6,11 +6,13 @@
 import json
 from datetime import UTC, datetime
 from html import escape
+from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -90,6 +92,10 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{escape(title)} | Wingman</title>"
+        "<link rel='icon' href='/assets/favicon/favicon.svg' type='image/svg+xml'>"
+        "<link rel='alternate icon' href='/assets/favicon/favicon.ico'>"
+        "<link rel='apple-touch-icon' href='/assets/favicon/apple-touch-icon.png'>"
+        "<link rel='manifest' href='/assets/favicon/site.webmanifest'>"
         "<link rel='preconnect' href='https://cdnjs.cloudflare.com'>"
         "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css'>"
         "<style>"
@@ -136,6 +142,9 @@ def page_shell(title: str, body: str, active: str = "") -> str:
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title="Wingman", version=__version__)
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/health", response_class=HTMLResponse)
     def health() -> str:
