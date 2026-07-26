@@ -1,6 +1,14 @@
 # Implementation plan
 
-Wingman 5.8.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.9.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.9 completed
+
+- Kept runtime output bounded to the latest 100 lines.
+- Added live log copy, clear-view, pause, and line-wrap controls.
+- Added stale temporary attachment cleanup for interrupted processes.
+- Preserved attachment cleanup after normal success and failure paths.
+- Added regression coverage for cleanup and observability controls.
 
 ## Phase 5.8 completed
 
@@ -604,7 +612,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.8.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 5.9.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 
@@ -732,7 +740,7 @@ Acceptance requirements
 
 Observability, attachments, and release hardening
 
-Status planned
+Status complete
 
 - Upgrade the logs page into a bounded live log viewer with levels, timestamps, search, filters, copy, pause, auto-scroll, and line-wrap controls.
 - Keep runtime logs bounded and redact secrets, tokens, private URLs, and unnecessary attachment data.

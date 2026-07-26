@@ -1,6 +1,6 @@
 # Security
 
-These notes apply to Wingman 5.8.0.
+These notes apply to Wingman 5.9.0.
 
 Wingman stores private relationship information. Run it on a trusted machine and protect the project directory, database, logs, exports, backups, and `.env` file.
 

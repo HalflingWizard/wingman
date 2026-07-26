@@ -29,7 +29,12 @@ from aiogram.types import (
 from wingman.config import Settings
 from wingman.context_builder import build_context
 from wingman.database import session_factory
-from wingman.inbound import InboundAttachment, InboundMessage, cleanup_inbound_attachments
+from wingman.inbound import (
+    InboundAttachment,
+    InboundMessage,
+    cleanup_inbound_attachments,
+    cleanup_orphaned_attachment_files,
+)
 from wingman.lifecycle import is_paused
 from wingman.model_client import AVAILABLE_TOOLS, ModelClient
 from wingman.models import Event, Memory, Message, Place, Reminder, SavedIdea, now_utc
@@ -713,6 +718,12 @@ async def download_video(
 def build_dispatcher(settings: Settings) -> Dispatcher:
     dispatcher = Dispatcher()
     router = Router()
+    removed_orphans = cleanup_orphaned_attachment_files(settings.attachment_retention_seconds)
+    if removed_orphans:
+        record_runtime_output(
+            f"Removed {removed_orphans} stale temporary attachment file(s)",
+            operation="attachment cleanup",
+        )
     sessions = session_factory(settings)
     model_client = ModelClient(settings) if settings.openai_api_key else None
     image_groups: dict[str, list[TelegramMessage]] = {}

@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import gettempdir
 
 
 @dataclass(frozen=True)
@@ -43,3 +44,22 @@ def cleanup_inbound_attachments(message: InboundMessage) -> None:
     for attachment in message.attachments:
         if attachment.local_path:
             Path(attachment.local_path).unlink(missing_ok=True)
+
+
+def cleanup_orphaned_attachment_files(
+    retention_seconds: int, temp_directory: str | None = None
+) -> int:
+    """Remove stale Wingman temporary media left by an interrupted process."""
+    root = Path(temp_directory or gettempdir())
+    cutoff = datetime.now(UTC).timestamp() - max(60, retention_seconds)
+    removed = 0
+    for path in root.glob("wingman-*"):
+        if not path.is_file():
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
