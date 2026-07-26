@@ -410,11 +410,12 @@ async def run_media_command(command: list[str], timeout_seconds: int) -> tuple[b
 
 
 async def inspect_video(path: str, settings: Settings) -> tuple[float, bool]:
-    if shutil.which("ffprobe") is None:
+    ffprobe = media_tool_path("ffprobe")
+    if ffprobe is None:
         raise RuntimeError("Video processing tools are not installed")
     stdout, _ = await run_media_command(
         [
-            "ffprobe",
+            ffprobe,
             "-v",
             "error",
             "-show_entries",
@@ -438,13 +439,23 @@ async def inspect_video(path: str, settings: Settings) -> tuple[float, bool]:
     return duration, "audio" in stream_types
 
 
+def media_tool_path(name: str) -> str | None:
+    for candidate in (shutil.which(name), f"/opt/homebrew/bin/{name}", f"/usr/local/bin/{name}"):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
 async def download_video(
     message: TelegramMessage, model_client: ModelClient, settings: Settings
 ) -> InboundMessage:
-    video = message.video
+    ffmpeg = media_tool_path("ffmpeg")
+    if ffmpeg is None or media_tool_path("ffprobe") is None:
+        raise RuntimeError("Video processing tools are not installed")
+    video = message.video or message.video_note
     if video is None or message.bot is None:
         raise ValueError("Video message is not available")
-    filename = video.file_name or "wingman-video.mp4"
+    filename = getattr(video, "file_name", None) or "wingman-video.mp4"
     extension = Path(filename).suffix.casefold() or ".mp4"
     if extension not in SUPPORTED_VIDEOS:
         raise ValueError("This video format is not supported yet")
@@ -475,7 +486,7 @@ async def download_video(
                 audio_path = file.name
             await run_media_command(
                 [
-                    "ffmpeg",
+                    ffmpeg,
                     "-y",
                     "-i",
                     video_path,
@@ -503,7 +514,7 @@ async def download_video(
                 frame_path = file.name
             await run_media_command(
                 [
-                    "ffmpeg",
+                    ffmpeg,
                     "-y",
                     "-ss",
                     f"{timestamp:.3f}",
@@ -683,7 +694,13 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             (
                 item
                 for item in batch
-                if item.voice is not None or item.photo or item.document or item.video is not None
+                if (
+                    item.voice is not None
+                    or item.photo
+                    or item.document
+                    or item.video is not None
+                    or item.video_note is not None
+                )
             ),
             batch[0],
         )
@@ -698,6 +715,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             and not message.photo
             and not message.document
             and message.video is None
+            and message.video_note is None
         ):
             await message.answer(
                 "I can process text, voice, image, document, and video messages. "
@@ -749,6 +767,13 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 else:
                     inbound = await with_typing(message, download_document(message, settings))
             elif message.video is not None:
+                if model_client is None:
+                    await message.answer("I need an OpenAI API key to analyze videos.")
+                    return
+                inbound = await with_typing(
+                    message, download_video(message, model_client, settings)
+                )
+            elif message.video_note is not None:
                 if model_client is None:
                     await message.answer("I need an OpenAI API key to analyze videos.")
                     return

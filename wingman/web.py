@@ -627,14 +627,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def system_page() -> str:
         paused = is_paused(active_settings)
         revision = repository_version()
-        update = read_update_status(active_settings)
-        update_logs = "\n".join(str(item) for item in update.get("logs", []))
-        update_panel = (
-            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-terminal'></i> Update progress</h2>"
-            f"<span id='update-status' class='badge'>{escape(str(update.get('status', 'idle')))}</span></div>"
-            f"{code_panel('Update log', update_logs or 'No update has run yet.', 260)}"
-            "<script>setInterval(()=>fetch('/system/update-status').then(r=>r.json()).then(s=>{document.querySelector('#update-status').textContent=s.status;const pre=document.querySelector('.code-block');if(s.logs)pre.textContent=s.logs.join('\\n');}),1500);</script></section>"
-        )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Controls</p><h1>System</h1>"
             "<p class='muted'>Manage the bot lifecycle and local data safely.</p></div></header>"
@@ -651,9 +643,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             + f"<p><strong>Version {escape(__version__)}</strong></p><p><strong>Commit {escape(revision['commit'])}</strong></p>"
             + f"<p>{escape(revision['message'])}</p>"
             + "<form method='post' action='/system/update'><button><i class='fa-solid fa-rotate'></i> Safe Git update</button></form></section>"
-            + update_panel
         )
         return page_shell("System", body, "system")
+
+    @app.get("/system/update-progress", response_class=HTMLResponse)
+    def update_progress_page() -> str:
+        update = read_update_status(active_settings)
+        status = str(update.get("status", "idle"))
+        logs = "\n".join(str(item) for item in update.get("logs", []))
+        message = (
+            "Update completed. You can return to the dashboard."
+            if status == "completed"
+            else "The update is running. This page will refresh its log automatically."
+        )
+        if status == "failed":
+            message = f"Update failed. {update.get('error', '')}"
+        body = (
+            "<header class='page-header'><div><p class='eyebrow'>Repository update</p><h1>Updating Wingman</h1>"
+            f"<p class='muted'>{escape(message)}</p></div><span id='update-status' class='badge'>{escape(status)}</span></header>"
+            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-terminal'></i> Update log</h2>"
+            f"{code_panel('Live update output', logs or 'Waiting for the update to start.', 360)}"
+            "<p id='update-return' class='form-actions'>"
+            + (
+                "<a class='button' href='/'>Return to dashboard</a>"
+                if status in {"completed", "failed"}
+                else ""
+            )
+            + "</p></section>"
+            "<script>const updateTimer=setInterval(()=>fetch('/system/update-status').then(r=>r.json()).then(s=>{document.querySelector('#update-status').textContent=s.status;const pre=document.querySelector('.code-block');if(s.logs)pre.textContent=s.logs.join('\\n');if(s.status==='completed'||s.status==='failed'){clearInterval(updateTimer);document.querySelector('#update-return').innerHTML='<a class=\"button\" href=\"/\">Return to dashboard</a>';}}),1500);</script>"
+        )
+        return page_shell("Updating Wingman", body, "system")
 
     @app.get("/system/export")
     def export_json() -> Response:
@@ -694,7 +713,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def update_system() -> str:
         current = read_update_status(active_settings)
         if current.get("status") == "running":
-            return system_page()
+            return update_progress_page()
         write_update_status(active_settings, "running", ["Update queued"])
 
         def run_update() -> None:
@@ -712,7 +731,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
 
         threading.Thread(target=run_update, daemon=True).start()
-        return system_page()
+        return update_progress_page()
 
     @app.get("/system/update-status")
     def update_status() -> dict[str, Any]:

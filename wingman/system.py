@@ -85,6 +85,29 @@ def read_update_status(settings: Settings) -> dict[str, Any]:
     return value if isinstance(value, dict) else {"status": "idle", "logs": []}
 
 
+def ensure_media_tools(settings: Settings, logs: list[str]) -> None:
+    """Install FFmpeg when the local package manager is available."""
+    if all(
+        Path(candidate).is_file()
+        for candidate in (
+            shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg",
+            shutil.which("ffprobe") or "/opt/homebrew/bin/ffprobe",
+        )
+    ):
+        logs.append("FFmpeg and ffprobe are available")
+        return
+    brew = shutil.which("brew")
+    if brew is None:
+        raise RuntimeError("FFmpeg is required for video processing. Install it with Homebrew")
+    logs.append("FFmpeg is missing. Installing it with Homebrew")
+    result = subprocess.run(
+        [brew, "install", "ffmpeg"], cwd=Path(__file__).resolve().parent.parent, check=False
+    )
+    if result.returncode != 0:
+        raise RuntimeError("Homebrew could not install FFmpeg")
+    logs.append("FFmpeg installation completed")
+
+
 def database_diagnostics(settings: Settings, session: Session, user: User) -> dict[str, object]:
     """Return safe database and owner-scope information for local diagnostics."""
     if settings.database_url.startswith("sqlite:///"):
@@ -331,6 +354,7 @@ def safe_update(settings: Settings) -> str:
             text=True,
         )
         logs.extend(line for line in install.stdout.splitlines() if line.strip())
+        ensure_media_tools(settings, logs)
     except subprocess.CalledProcessError as exc:
         output = (exc.stdout or "") + (exc.stderr or "")
         logs.extend(line for line in output.splitlines() if line.strip())
