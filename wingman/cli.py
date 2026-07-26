@@ -53,7 +53,7 @@ def start(no_browser: bool) -> None:
     settings = get_settings()
     PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
     initialize_database(settings)
-    app = create_app()
+    app = create_app(settings)
     web_port = find_available_port(settings.web_host, settings.web_port)
 
     def web_server() -> None:

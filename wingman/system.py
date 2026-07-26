@@ -23,6 +23,34 @@ from wingman.models import (
 )
 
 
+def database_diagnostics(settings: Settings, session: Session, user: User) -> dict[str, object]:
+    """Return safe database and owner-scope information for local diagnostics."""
+    if settings.database_url.startswith("sqlite:///"):
+        database_path = Path(settings.database_url.removeprefix("sqlite:///"))
+        resolved_path = database_path.resolve()
+        exists = resolved_path.exists()
+        size = resolved_path.stat().st_size if exists else 0
+    else:
+        resolved_path = None
+        exists = True
+        size = None
+    return {
+        "database_url": settings.database_url,
+        "database_path": str(resolved_path) if resolved_path is not None else None,
+        "database_exists": exists,
+        "database_size_bytes": size,
+        "configured_owner_id": settings.telegram_owner_id,
+        "database_user_id": user.id,
+        "database_telegram_user_id": user.telegram_user_id,
+        "database_user_name": user.name,
+        "memory_count": session.query(Memory).filter_by(user_id=user.id).count(),
+        "place_count": session.query(Place).filter_by(user_id=user.id).count(),
+        "idea_count": session.query(SavedIdea).filter_by(user_id=user.id).count(),
+        "event_count": session.query(Event).filter_by(user_id=user.id).count(),
+        "reminder_count": session.query(Reminder).filter_by(user_id=user.id).count(),
+    }
+
+
 def _row(record: Any, fields: list[str]) -> dict[str, object]:
     return {field: getattr(record, field) for field in fields}
 

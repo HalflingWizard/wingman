@@ -7,10 +7,10 @@ import json
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
@@ -41,7 +41,13 @@ from wingman.services import (
     update_memory,
     update_memory_note,
 )
-from wingman.system import backup_database, export_user_data, import_user_data, safe_update
+from wingman.system import (
+    backup_database,
+    database_diagnostics,
+    export_user_data,
+    import_user_data,
+    safe_update,
+)
 
 
 def code_panel(label: str, content: str, max_height: int = 420) -> str:
@@ -142,6 +148,17 @@ def page_shell(title: str, body: str, active: str = "") -> str:
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title="Wingman", version=__version__)
+
+    @app.middleware("http")
+    async def prevent_dashboard_caching(request: Request, call_next: Any) -> Response:
+        response: Response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith(
+            ("/memories", "/planning", "/context", "/conversations", "/health", "/system")
+        ):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     assets_dir = Path(__file__).resolve().parent.parent / "assets"
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
@@ -203,16 +220,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 .filter(Conversation.user_id == user.id)
                 .count()
             )
+            database_info = database_diagnostics(active_settings, session, user)
+        read_at = datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
         body = (
             f"<header class='page-header'><div><p class='eyebrow'>Private workspace</p>"
             f"<h1>Good to see you, {escape(active_settings.user_name)}</h1>"
             "<p class='muted'>Keep the important details close and the conversation natural.</p></div>"
-            f"<span class='badge'><span class='status-dot'></span>Wingman {__version__}</span></header>"
+            f"<div class='stack'><span class='badge'><span class='status-dot'></span>Wingman {__version__}</span>"
+            "<a class='button button-secondary' href='/?refresh=1'><i class='fa-solid fa-arrows-rotate'></i> Refresh</a></div></header>"
             "<section class='summary-grid'>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-brain'></i></div><span class='stat-value'>{memory_count}</span><span class='stat-label'>Saved memories</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-comments'></i></div><span class='stat-value'>{conversation_count}</span><span class='stat-label'>Conversations</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-code'></i></div><span class='stat-value'>{api_call_count}</span><span class='stat-label'>Recorded API calls</span></div>"
-            "</section><section class='panel'><div class='panel-header'><div><p class='eyebrow'>Workspace tools</p>"
+            "</section><section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-database'></i> Data source</h2>"
+            f"<span class='muted'>Read at {escape(read_at)}</span></div>"
+            f"<p class='muted'>This view uses the configured database and owner scope. It currently contains {database_info['memory_count']} memories and {database_info['place_count']} places.</p>"
+            f"<p class='muted'>Database path {escape(str(database_info['database_path']))}</p></section>"
+            "<section class='panel'><div class='panel-header'><div><p class='eyebrow'>Workspace tools</p>"
             "<h2>Explore Wingman</h2></div><span class='muted'>Everything stays on this machine</span></div>"
             "<div class='quick-grid'>"
             "<a class='quick-card' href='/memories'><i class='fa-solid fa-brain'></i><strong>Memories</strong><small>Review facts, notes, and evidence.</small></a>"
@@ -538,6 +562,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/system", response_class=HTMLResponse)
     def system_page() -> str:
         paused = is_paused(active_settings)
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            database_info = database_diagnostics(active_settings, session, user)
+        diagnostics = json.dumps(database_info, indent=2, default=str, ensure_ascii=False)
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Controls</p><h1>System</h1>"
             "<p class='muted'>Manage the bot lifecycle and local data safely.</p></div></header>"
@@ -549,6 +577,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             + "<form method='post' action='/system/import' enctype='multipart/form-data'><label>Import JSON export <input type='file' name='export_file' accept='.json,application/json' required></label> <button class='button-secondary'><i class='fa-solid fa-upload'></i> Import data</button></form>"
             + "<form method='post' action='/system/backup'><button>Backup database</button></form>"
             + "<form method='post' action='/system/update'><button><i class='fa-solid fa-rotate'></i> Safe Git update</button></form></section>"
+            + code_panel("Database diagnostics", diagnostics, 300)
         )
         return page_shell("System", body, "system")
 

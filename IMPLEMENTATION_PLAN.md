@@ -294,7 +294,7 @@ Delivered
 
 Database consistency and dashboard freshness
 
-Status pending
+Status complete
 
 - Reproduce cases where a Telegram memory card exists but the dashboard does not show the record.
 - Verify the active database path, owner ID, process working directory, settings cache, and transaction boundaries used by Telegram and FastAPI.
@@ -302,6 +302,13 @@ Status pending
 - Make dashboard reads use the same configured settings and database source as the bot.
 - Add refresh behavior after writes and an optional manual refresh indicator with the last-read time.
 - Add tests that create records through the Telegram service path and immediately read them through dashboard routes.
+
+Delivered
+
+- The CLI now passes the exact startup settings object into the dashboard app, keeping bot and dashboard database configuration aligned.
+- Dashboard reads send no-cache headers and include a manual refresh control with a visible read timestamp.
+- The dashboard shows the active database path and owner-scope counts, while the System page shows safe database diagnostics.
+- Added regression tests covering Telegram service writes, immediate dashboard visibility, cache headers, and diagnostic scope output.
 
 ### Phase 3.5
 
