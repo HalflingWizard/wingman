@@ -1,0 +1,19 @@
+[Unit]
+Description=Wingman Telegram Assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=matt
+WorkingDirectory=/home/matt/Documents/wingman
+ExecStart=/home/matt/Documents/wingman/.venv/bin/wingman start --no-browser
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+Environment=HOME=/home/matt
+Environment=PATH=/home/matt/Documents/wingman/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

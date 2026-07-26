@@ -125,6 +125,10 @@ wingman doctor
 
 `wingman update` performs a safe fast-forward update only when the Git worktree is clean. The System page provides the same update action, together with database backups, export, import, and bot pause or resume.
 
+Video support requires the FFmpeg system package, which includes both `ffmpeg` and `ffprobe`. The installer and updater try Homebrew, apt, dnf, or pacman. If the service account cannot install system packages, install FFmpeg manually before using video messages.
+
+For systemd deployments, install `deploy/wingman.service`, update the `User` and paths, then run `sudo systemctl daemon-reload` and `sudo systemctl enable --now wingman`. The service uses `Restart=always`, so a completed dashboard update cleanly stops the old process and lets systemd start the new code. Run only one Wingman instance for each Telegram bot token.
+
 ## Data and backups
 
 The default database is `wingman.db` in the current directory. Set `WINGMAN_DATABASE_URL` to use another SQLite location. The System page can export user data as versioned JSON and import that JSON later. Database backups are stored under `WINGMAN_DATA_DIR/backups` with restrictive file permissions.

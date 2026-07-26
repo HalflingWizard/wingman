@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -28,12 +29,18 @@ def set_paused(settings: Settings, paused: bool) -> None:
 
 
 def restart_process(no_browser: bool = True, delay_seconds: float = 0.0) -> None:
-    """Replace the current process so newly installed Python code is loaded."""
+    """Restart cleanly, allowing systemd to create a fresh polling session."""
     command = [sys.executable, "-m", "wingman.cli", "start"]
     if no_browser:
         command.append("--no-browser")
 
     def replace() -> None:
+        if os.environ.get("INVOCATION_ID"):
+            # A system service must be restarted by its supervisor. The service
+            # unit should use Restart=always, so SIGTERM produces a clean stop
+            # and a new process without a second Telegram poller.
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
         os.execv(sys.executable, command)
 
     if delay_seconds > 0:

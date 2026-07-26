@@ -1,6 +1,7 @@
 """Safe export, backup, and update helpers."""
 
 import json
+import os
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -86,25 +87,52 @@ def read_update_status(settings: Settings) -> dict[str, Any]:
 
 
 def ensure_media_tools(settings: Settings, logs: list[str]) -> None:
-    """Install FFmpeg when the local package manager is available."""
-    if all(
-        Path(candidate).is_file()
-        for candidate in (
-            shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg",
-            shutil.which("ffprobe") or "/opt/homebrew/bin/ffprobe",
+    """Install the FFmpeg system package when a supported manager is available."""
+    tool_paths = {
+        name: shutil.which(name)
+        or next(
+            (candidate for candidate in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+             if Path(candidate, name).is_file()),
+            None,
         )
-    ):
+        for name in ("ffmpeg", "ffprobe")
+    }
+    if all(tool_paths.values()):
         logs.append("FFmpeg and ffprobe are available")
         return
+
+    missing = ", ".join(name for name, path in tool_paths.items() if not path)
+    root = Path(__file__).resolve().parent.parent
     brew = shutil.which("brew")
-    if brew is None:
-        raise RuntimeError("FFmpeg is required for video processing. Install it with Homebrew")
-    logs.append("FFmpeg is missing. Installing it with Homebrew")
-    result = subprocess.run(
-        [brew, "install", "ffmpeg"], cwd=Path(__file__).resolve().parent.parent, check=False
-    )
+    if brew is not None:
+        logs.append(f"{missing} is missing. Installing FFmpeg with Homebrew")
+        command = [brew, "install", "ffmpeg"]
+    else:
+        package_manager = next(
+            (command for command in ("apt-get", "dnf", "pacman") if shutil.which(command)),
+            None,
+        )
+        if package_manager == "apt-get":
+            command = ["apt-get", "install", "-y", "ffmpeg"]
+        elif package_manager == "dnf":
+            command = ["dnf", "install", "-y", "ffmpeg"]
+        elif package_manager == "pacman":
+            command = ["pacman", "-S", "--noconfirm", "ffmpeg"]
+        else:
+            raise RuntimeError(
+                f"{missing} is required for video processing. Install the FFmpeg system package"
+            )
+        if os.geteuid() != 0:
+            command = ["sudo", "-n", *command]
+        logs.append(f"{missing} is missing. Installing the FFmpeg system package")
+    result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError("Homebrew could not install FFmpeg")
+        output = (result.stdout + result.stderr).strip().splitlines()
+        if output:
+            logs.extend(output[-10:])
+        raise RuntimeError(
+            "Could not install FFmpeg automatically. Install ffmpeg and ffprobe manually"
+        )
     logs.append("FFmpeg installation completed")
 
 
@@ -350,8 +378,9 @@ def safe_update(settings: Settings) -> str:
         logs.append(f"Loaded commit {revision['commit']} {revision['message']}")
         logs.append("Installing the current project and development dependencies")
         write_update_status(settings, "running", logs, branch=branch)
+        python = str(Path(os.environ.get("VIRTUAL_ENV", root / ".venv")) / "bin" / "python")
         install = subprocess.run(
-            [".venv/bin/python", "-m", "pip", "install", "-qqq", "-e", ".[dev]"],
+            [python, "-m", "pip", "install", "-qqq", "-e", ".[dev]"],
             cwd=root,
             check=True,
             capture_output=True,
@@ -360,7 +389,7 @@ def safe_update(settings: Settings) -> str:
         logs.extend(line for line in install.stdout.splitlines() if line.strip())
         ensure_media_tools(settings, logs)
         verification = subprocess.run(
-            [".venv/bin/python", "-c", "import wingman; print(wingman.__version__)"],
+            [python, "-c", "import wingman; print(wingman.__version__)"],
             cwd=root,
             check=True,
             capture_output=True,

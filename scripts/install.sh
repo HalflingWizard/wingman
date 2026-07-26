@@ -10,6 +10,17 @@ PY
 python3 -m venv .venv
 .venv/bin/python -m pip install -qqq --upgrade pip
 .venv/bin/python -m pip install -qqq -e '.[dev]'
+if command -v brew >/dev/null 2>&1; then
+    brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+elif command -v apt-get >/dev/null 2>&1; then
+    sudo -n apt-get install -y ffmpeg || echo "Install ffmpeg manually with sudo apt-get install -y ffmpeg"
+elif command -v dnf >/dev/null 2>&1; then
+    sudo -n dnf install -y ffmpeg || echo "Install ffmpeg manually with sudo dnf install -y ffmpeg"
+elif command -v pacman >/dev/null 2>&1; then
+    sudo -n pacman -S --noconfirm ffmpeg || echo "Install ffmpeg manually with sudo pacman -S ffmpeg"
+else
+    echo "FFmpeg is not installed. Install the FFmpeg system package for video support."
+fi
 if [[ ! -e .env ]]; then
     if [[ -e .env.example ]]; then
         cp .env.example .env
