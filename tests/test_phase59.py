@@ -34,3 +34,23 @@ def test_phase59_logs_page_has_bounded_live_log_controls(tmp_path):
     assert "pause-live-log" in page.text
     assert "wrap-live-log" in page.text
     assert "Latest 100 lines" in page.text
+
+
+def test_phase59_location_suggestions_return_timezone_without_external_lookup(tmp_path):
+    settings = Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
+    initialize_database(settings)
+    response = TestClient(create_app(settings)).get("/api/location-suggestions?q=New")
+    assert response.status_code == 200
+    assert response.json()["suggestions"] == [
+        {"label": "New York, NY, USA", "timezone": "America/New_York"}
+    ]
+
+
+def test_phase59_planning_tabs_are_real_tab_links(tmp_path):
+    settings = Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
+    initialize_database(settings)
+    page = TestClient(create_app(settings)).get("/planning?tab=places")
+    assert page.status_code == 200
+    assert "role='tablist'" in page.text
+    assert "class='planning-tab active'" in page.text
+    assert "class='planning-tab '" in page.text

@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
+from urllib.request import urlopen
 from uuid import uuid4
 from zoneinfo import ZoneInfo, available_timezones
 
@@ -352,14 +354,14 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         ".quick-card i{color:#5968df;font-size:1.05rem}.quick-card strong{display:block;margin:.55rem 0 .2rem}.quick-card small{color:#68778d}"
         ".badge{display:inline-flex;align-items:center;border-radius:999px;padding:.2rem .55rem;font-size:.72rem;font-weight:700;background:#edf1ff;color:#4658c8}"
         ".stack{display:grid;gap:.8rem}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.form-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem}.field{display:grid;gap:.35rem}.field-wide{grid-column:1/-1}.field label,.stack>label{display:grid;gap:.35rem;font-size:.82rem;font-weight:700;color:#42516a}.form-actions{display:flex;flex-wrap:wrap;gap:.55rem;align-items:center}.compact-form{padding:.8rem;border-radius:.7rem;background:#f7f9fc;border:1px solid #e7ebf3}"
-        "input,select,textarea{font:inherit;border:1px solid #cbd4e2;border-radius:.55rem;padding:.6rem .7rem;background:#fff;max-width:100%;width:100%;color:#182230}textarea{min-height:7rem;resize:vertical}input:focus,select:focus,textarea:focus{outline:3px solid rgba(89,104,223,.16);border-color:#7180e8}"
+        "input,select,textarea{font:inherit;border:1px solid #cbd4e2;border-radius:.55rem;padding:.6rem .7rem;background:#fff;max-width:100%;width:100%;color:#182230}textarea{min-height:7rem;resize:vertical}input:focus,select:focus,textarea:focus{outline:3px solid rgba(89,104,223,.16);border-color:#7180e8}.location-suggestions{display:grid;gap:.35rem;margin-top:.35rem}.location-suggestions button{width:100%;text-align:left;background:#f7f9fc;color:#34425b;border:1px solid #e3e8f1}.location-suggestions button:hover{background:#eef1ff}"
         "button,.button{font:inherit;border:0;border-radius:.55rem;padding:.55rem .75rem;background:#4f60d8;color:#fff;cursor:pointer;font-weight:650}"
         "button:hover,.button:hover{background:#3f4fc1;text-decoration:none}.button-secondary{background:#eef1f8;color:#34425b}.button-danger{background:#fff0f0;color:#b13d4b}"
         ".code-panel{border:1px solid #d8dfeb;border-radius:.75rem;margin:1rem 0;overflow:hidden;background:#0d1117}.code-toolbar{display:flex;justify-content:space-between;"
         "align-items:center;padding:.55rem .75rem;background:#192231;color:#e5edf9;font-size:.82rem}.code-toolbar button{padding:.3rem .6rem;background:#34425b;font-size:.75rem}"
-        ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
+        ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;background:#0d1117;border-radius:.75rem;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
         ".usage-day{display:grid;grid-template-columns:7rem 1fr 6rem;gap:.7rem;align-items:center;margin:.75rem 0;font-size:.82rem}.usage-bar{height:1rem;display:flex;overflow:hidden;border-radius:999px;background:#eef1f7}.usage-bar span{height:100%}table{width:100%;border-collapse:collapse;font-size:.83rem}th,td{text-align:left;padding:.65rem;border-bottom:1px solid #edf0f5;white-space:nowrap}th{color:#53627b;background:#f7f9fc}"
-        ".usage-axis{color:#68778d;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}.usage-chart{height:220px;display:flex;align-items:end;gap:.65rem;padding:1rem .5rem 0;border-bottom:1px solid #cbd4e2}.usage-column{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:end;gap:.35rem;min-width:2.3rem}.usage-column-value{font-size:.68rem;color:#68778d;white-space:nowrap}.usage-column-bar{width:70%;min-height:0;border-radius:.45rem .45rem 0 0;background:linear-gradient(180deg,#7787f4,#5968df)}.usage-column small{color:#68778d;font-size:.7rem}.usage-chart-x{text-align:center;color:#68778d;font-size:.75rem;margin-top:.5rem}.active{box-shadow:inset 0 0 0 2px #5968df}"
+        ".usage-axis{color:#68778d;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}.usage-chart{height:220px;display:flex;align-items:end;gap:.65rem;padding:1rem .5rem 0;border-bottom:1px solid #cbd4e2}.usage-column{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:end;gap:.35rem;min-width:2.3rem}.usage-column-value{font-size:.68rem;color:#68778d;white-space:nowrap}.usage-column-bar{width:70%;min-height:0;border-radius:.45rem .45rem 0 0;background:linear-gradient(180deg,#7787f4,#5968df)}.usage-column small{color:#68778d;font-size:.7rem}.usage-chart-x{text-align:center;color:#68778d;font-size:.75rem;margin-top:.5rem}.active{box-shadow:inset 0 0 0 2px #5968df}.planning-tabs{display:flex;gap:0;border-bottom:1px solid #d8dfeb;margin-bottom:1rem;overflow:auto}.planning-tab{border-radius:.6rem .6rem 0 0;padding:.7rem 1rem;color:#68778d;font-weight:700;white-space:nowrap}.planning-tab:hover{background:#f1f3fa;text-decoration:none}.planning-tab.active{color:#34425b;background:#eef1ff;box-shadow:inset 0 -3px #5968df}"
         ".record-list{display:grid;gap:1rem;padding:0;list-style:none;min-width:0}.record{padding:1.15rem;min-width:0}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem;min-width:0}.message{max-width:82%;min-width:0;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p,.conversation-summary{margin:.25rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}.conversation-summary{max-height:260px;overflow:auto;padding:.85rem;background:#f7f9fc;border-radius:.65rem;color:#42516a}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
         ".health-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin-top:1rem}.health-check{padding:.9rem;border:1px solid #edf0f5;border-radius:.7rem;background:#fbfcfe}.health-check strong{display:block}.health-check small{display:block;color:#68778d;margin-top:.2rem}.health-check p{min-height:2.4rem}.health-check .badge{background:#eef1f8;color:#68778d}.health-check .record-top{margin-bottom:.3rem}.health-check form{margin:0}@media(max-width:760px){.health-check-grid{grid-template-columns:1fr}}"
         "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
@@ -941,7 +943,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             for reminder in reminders
         )
         tab_links = "".join(
-            f"<a class='button {'active' if tab == key else 'button-secondary'}' href='/planning?tab={key}'>{label}</a>"
+            f"<a class='planning-tab {'active' if tab == key else ''}' href='/planning?tab={key}' role='tab' aria-selected='{'true' if tab == key else 'false'}'>{label}</a>"
             for key, label in (
                 ("places", "Places"),
                 ("ideas", "Saved ideas"),
@@ -978,7 +980,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "<p class='muted'>Collect places, ideas, events, and reminders in one calm workspace.</p></div>"
             f"<a class='button button-secondary' href='/planning?tab={tab}&show_deleted={'0' if include_deleted else '1'}'>"
             f"{'Hide deleted' if include_deleted else 'Show deleted'}</a></header>"
-            + f"<section class='panel'><nav class='form-actions'>{tab_links}</nav><form method='get' action='/planning' class='form-actions'><input type='hidden' name='tab' value='{tab}'><input name='q' value='{escape(request.query_params.get('q', ''), quote=True)}' placeholder='Search this section'><button class='button-secondary'>Search</button></form></section>"
+            + f"<section class='panel'><nav class='planning-tabs' role='tablist'>{tab_links}</nav><form method='get' action='/planning' class='form-actions'><input type='hidden' name='tab' value='{tab}'><input name='q' value='{escape(request.query_params.get('q', ''), quote=True)}' placeholder='Search this section'><button class='button-secondary'>Search</button></form></section>"
             + f"<section class='panel'><h2 class='section-title'>{escape(headings[tab])}</h2><form class='stack compact-form' method='post' action='/planning/{actions[tab]}'>{forms[tab]}</form></section>"
             + f"<section class='record-list'>{rows or "<p class='muted'>No records match this view.</p>"}</section>"
         )
@@ -1000,6 +1002,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             create_place(session, user, name, address, city, description)
         return planning(request)
 
+    @app.get("/api/location-suggestions")
+    def location_suggestions(q: str = "") -> dict[str, list[dict[str, str]]]:
+        query = q.strip()
+        if len(query) < 2:
+            return {"suggestions": []}
+        local_matches = [
+            {"label": label, "timezone": timezone}
+            for label, timezone in TIMEZONE_CITIES.items()
+            if label.casefold().startswith(query.casefold())
+        ]
+        if local_matches:
+            return {"suggestions": local_matches[:8]}
+        suggestions: list[dict[str, str]] = []
+        try:
+            endpoint = (
+                "https://geocoding-api.open-meteo.com/v1/search?name="
+                + quote(query)
+                + "&count=8&language=en&format=json"
+            )
+            with urlopen(endpoint, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            for city in payload.get("results", []):
+                label = ", ".join(
+                    str(value)
+                    for value in (city.get("name"), city.get("admin1"), city.get("country"))
+                    if value
+                )
+                timezone = str(city.get("timezone") or "")
+                if label and not any(item["label"] == label for item in suggestions):
+                    suggestions.append({"label": label, "timezone": timezone})
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+        return {"suggestions": suggestions[:8]}
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page() -> str:
         def mask(value: str) -> str:
@@ -1009,11 +1045,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<option value='{escape(zone, quote=True)}'{' selected' if zone == active_settings.timezone else ''}>{escape(zone.replace('_', ' ').replace('/', ' / '))}</option>"
             for zone in sorted(available_timezones())
         )
-        city_options = "".join(
-            f"<option value='{escape(city, quote=True)}'></option>" for city in TIMEZONE_CITIES
-        )
-        city_map = json.dumps(TIMEZONE_CITIES)
-
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Configuration</p><h1>Settings</h1>"
             "<p class='muted'>Runtime values are read from the environment. Secrets stay masked here.</p></div></header>"
@@ -1029,9 +1060,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<label class='field'>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
             f"<label class='field'>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
             "<h2 class='section-title'><i class='fa-solid fa-location-dot'></i> Local settings</h2>"
-            f"<label class='field'>City or location <input id='timezone-city' name='location' value='{escape(active_settings.location, quote=True)}' list='timezone-cities' autocomplete='off' placeholder='Start typing a city, for example Philadelphia'><datalist id='timezone-cities'>{city_options}</datalist></label>"
+            f"<label class='field'>City or location <input id='timezone-city' name='location' value='{escape(active_settings.location, quote=True)}' autocomplete='off' placeholder='Type at least two letters, for example New'><div id='location-suggestions' class='location-suggestions' role='listbox'></div></label>"
             f"<label class='field'>Timezone <select id='timezone-select' name='timezone'>{timezone_options}</select></label></div>"
-            f"<script>const timezoneCities={city_map};const cityInput=document.querySelector('#timezone-city');const cityList=document.querySelector('#timezone-cities');const timezoneSelect=document.querySelector('#timezone-select');let cityTimer;cityInput.addEventListener('input',()=>{{clearTimeout(cityTimer);const query=cityInput.value.trim();if(query.length<2)return;cityTimer=setTimeout(()=>fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(query)+'&count=8&language=en&format=json').then(response=>response.json()).then(data=>{{cityList.replaceChildren();(data.results||[]).forEach(city=>{{const label=[city.name,city.admin1,city.country].filter(Boolean).join(', ');const option=document.createElement('option');option.value=label;option.dataset.timezone=city.timezone||'';cityList.appendChild(option);}});}}).catch(()=>{{}}),250);}});cityInput.addEventListener('change',()=>{{const option=[...cityList.options].find(item=>item.value===cityInput.value);const zone=option?.dataset.timezone||timezoneCities[cityInput.value];if(zone)timezoneSelect.value=zone;}});</script>"
+            "<script>const cityInput=document.querySelector('#timezone-city');const suggestionBox=document.querySelector('#location-suggestions');const timezoneSelect=document.querySelector('#timezone-select');let cityTimer;function showLocationSuggestions(items){suggestionBox.replaceChildren();items.forEach(item=>{const button=document.createElement('button');button.type='button';button.textContent=item.label;button.addEventListener('click',()=>{cityInput.value=item.label;if(item.timezone)timezoneSelect.value=item.timezone;suggestionBox.replaceChildren();});suggestionBox.appendChild(button);});}cityInput.addEventListener('input',()=>{clearTimeout(cityTimer);const query=cityInput.value.trim();suggestionBox.replaceChildren();if(query.length<2)return;cityTimer=setTimeout(()=>fetch('/api/location-suggestions?q='+encodeURIComponent(query),{cache:'no-store'}).then(response=>response.json()).then(data=>showLocationSuggestions(data.suggestions||[])).catch(()=>{}),250);});</script>"
             "<p><button><i class='fa-solid fa-floppy-disk'></i> Save settings</button></p></form></section>"
             "<section class='panel'><p>This dashboard is local-only. Blank secret fields keep the current values. Settings are stored in the local .env file, which is plaintext and should not be exposed.</p></section>"
         )
