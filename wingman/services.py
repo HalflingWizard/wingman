@@ -408,14 +408,15 @@ def create_saved_idea(
     return idea
 
 
-def list_saved_ideas(session: Session, user: User) -> list[SavedIdea]:
-    return list(
-        session.scalars(
-            select(SavedIdea)
-            .where(SavedIdea.user_id == user.id)
-            .order_by(SavedIdea.updated_at.desc())
-        )
+def list_saved_ideas(
+    session: Session, user: User, include_deleted: bool = False
+) -> list[SavedIdea]:
+    query = select(SavedIdea).where(SavedIdea.user_id == user.id).order_by(
+        SavedIdea.updated_at.desc()
     )
+    if not include_deleted:
+        query = query.where(SavedIdea.status != "deleted")
+    return list(session.scalars(query))
 
 
 def find_saved_idea_by_title(session: Session, user: User, title: str) -> SavedIdea | None:
@@ -455,10 +456,17 @@ def create_event(
     return event
 
 
-def list_events(session: Session, user: User, upcoming_only: bool = False) -> list[Event]:
+def list_events(
+    session: Session,
+    user: User,
+    upcoming_only: bool = False,
+    include_deleted: bool = False,
+) -> list[Event]:
     query = select(Event).where(Event.user_id == user.id).order_by(Event.start_at)
     if upcoming_only:
         query = query.where(Event.status == "planned", Event.start_at >= datetime.now(UTC))
+    elif not include_deleted:
+        query = query.where(Event.status != "cancelled")
     return list(session.scalars(query))
 
 
@@ -499,10 +507,17 @@ def create_reminder(
     return reminder
 
 
-def list_reminders(session: Session, user: User, active_only: bool = False) -> list[Reminder]:
+def list_reminders(
+    session: Session,
+    user: User,
+    active_only: bool = False,
+    include_deleted: bool = False,
+) -> list[Reminder]:
     query = select(Reminder).where(Reminder.user_id == user.id).order_by(Reminder.scheduled_at)
     if active_only:
         query = query.where(Reminder.status == "scheduled")
+    elif not include_deleted:
+        query = query.where(Reminder.status != "cancelled")
     return list(session.scalars(query))
 
 
@@ -1023,6 +1038,18 @@ def delete_planning_record(
         card.updated_at = datetime.now(UTC)
     session.commit()
     return str(getattr(record, "name", None) or getattr(record, "title", entity_type))
+
+
+def purge_planning_record(session: Session, user: User, entity_type: str, entity_id: str) -> None:
+    """Permanently remove an isolated temporary planning record."""
+    record = get_owned_planning_record(session, user, entity_type, entity_id)
+    if record is None:
+        return
+    session.query(TelegramPlanningCard).filter_by(
+        user_id=user.id, entity_type=entity_type, entity_id=entity_id
+    ).delete(synchronize_session=False)
+    session.delete(record)
+    session.commit()
 
 
 def get_owned_planning_record(

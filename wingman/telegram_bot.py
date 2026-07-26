@@ -76,7 +76,9 @@ SUPPORTED_DOCUMENTS = {
 }
 SUPPORTED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm"}
 VIDEO_FRAME_COUNT = 5
-MESSAGE_BATCH_WINDOW_SECONDS = 1.0
+# Telegram may deliver separate photos and their caption as distinct updates.
+# Three seconds gives the group time to arrive without making normal replies feel slow.
+MESSAGE_BATCH_WINDOW_SECONDS = 3.0
 
 
 def supported_document_type(filename: str, mime_type: str | None = None) -> str | None:
@@ -534,6 +536,8 @@ async def download_video(
         text = message.caption or ""
         if transcript:
             text = f"{text}\n\n[Video transcript]\n{transcript}".strip()
+        else:
+            text = f"{text}\n\n[Video has no speech transcript. Use the five video frames.]".strip()
         attachments = tuple(
             InboundAttachment(
                 source_type="telegram_video_frame",
@@ -570,18 +574,26 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     image_groups: dict[str, list[TelegramMessage]] = {}
     batch_lock = asyncio.Lock()
     batch_buffers: dict[int, list[TelegramMessage]] = {}
+    batch_last_received: dict[int, float] = {}
     batch_leaders: set[int] = set()
 
     async def collect_message_batch(message: TelegramMessage) -> list[TelegramMessage] | None:
         chat_id = message.chat.id
         async with batch_lock:
             batch_buffers.setdefault(chat_id, []).append(message)
+            batch_last_received[chat_id] = asyncio.get_running_loop().time()
             if chat_id in batch_leaders:
                 return None
             batch_leaders.add(chat_id)
-        await asyncio.sleep(MESSAGE_BATCH_WINDOW_SECONDS)
+        while True:
+            await asyncio.sleep(MESSAGE_BATCH_WINDOW_SECONDS)
+            async with batch_lock:
+                last_received = batch_last_received.get(chat_id, 0.0)
+            if asyncio.get_running_loop().time() - last_received >= MESSAGE_BATCH_WINDOW_SECONDS:
+                break
         async with batch_lock:
             batch = batch_buffers.pop(chat_id, [])
+            batch_last_received.pop(chat_id, None)
             batch_leaders.discard(chat_id)
         return batch
 
@@ -915,13 +927,11 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     if item.id == summary.summarized_through_message_id:
                         summary_start = index + 1
                         break
-            if summary.summarized_through_message_id:
-                summary_messages = conversation.messages[
-                    summary_start : -settings.recent_message_limit
-                ]
-            else:
-                summary_messages = conversation.messages[: -settings.recent_message_limit]
-            summary_needed = len(summary_messages) > 0
+            unsummarized_messages = conversation.messages[summary_start:]
+            summary_needed = len(unsummarized_messages) >= settings.recent_message_limit
+            summary_messages = (
+                unsummarized_messages[: settings.recent_message_limit] if summary_needed else []
+            )
             existing_summary = summary.summary_text
             summary_message_ids = [item.id for item in summary_messages]
             summary_through_id = summary_messages[-1].id if summary_messages else None

@@ -669,7 +669,11 @@ class ModelClient:
                 "Preserve who said each important detail. Include media placeholders such as "
                 "[3 photos], [voice message], [video], or [2 documents] when they appear. "
                 "Merge the existing summary with the new messages, remove contradictions, and "
-                "avoid repeating durable memories that are already stored separately. Never "
+                "write a concise synthesis rather than copying a message. Organize the result "
+                "with short labeled sections such as Current situation, Important details, "
+                "Plans and open questions. If only one message is provided, summarize its "
+                "meaning without pretending there is more context. Avoid repeating durable "
+                "memories that are already stored separately. Never "
                 "write instructions to save a memory and never address the owner directly."
             ),
             input=f"Existing summary\n{existing_summary}\n\nMessages\n{input_text}",

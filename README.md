@@ -4,6 +4,8 @@
 
 Wingman is a private Telegram relationship assistant for one owner. It helps you remember useful details, understand ongoing conversations, plan thoughtful dates, and review how an AI response was produced.
 
+The current release is Wingman 4.0.0.
+
 It is designed to feel like a natural conversation with a thoughtful friend. Memory tools, retrieval, prompts, and diagnostics work behind the scenes. Telegram stays focused on the conversation, while the local dashboard gives you control and transparency.
 
 ## What it helps with
@@ -17,6 +19,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Search and save planning records conversationally when the owner clearly asks
 - Send due reminders through Telegram
 - Use the owner's name, primary person's name, timezone, and current time naturally
+- Search for a city in Settings and select its timezone from geocoding results
 - Keep facts, observations, and inferences separate
 - Accept Telegram voice messages, transcribe them, and process them like text
 - Accept Telegram images with captions or without captions, including small image groups
@@ -24,6 +27,8 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Preserve original quality when an image is sent as a Telegram file instead of a compressed photo
 - Accept PDF, DOCX, TXT, Markdown, CSV, and JSON files for temporary analysis
 - Process supported videos by transcribing audio and sampling five visual frames
+- Use the visual frames when a video has no speech
+- Group messages delivered close together, including separate photos and captions
 - Keep temporary attachment metadata for traceability while deleting local input files after processing
 - Inspect prompts, dynamic context, tool calls, retrieval scores, token use, latency, and errors
 - View loaded Git commit information and estimated model usage in the dashboard
@@ -154,7 +159,7 @@ The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLit
 - [Implementation history](IMPLEMENTATION_PLAN.md)
 - [Controlled development loop](DEVELOPMENT_LOOP.md)
 - [Development task ledger](DEVELOPMENT_TASKS.json)
-- [Version 3.0.0 release notes](RELEASE_NOTES_v3.0.0.md)
+- [Version 4.0.0 release notes](RELEASE_NOTES_v4.0.0.md)
 
 ## License
 
