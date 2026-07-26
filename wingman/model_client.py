@@ -341,6 +341,7 @@ class ModelClient:
         self.last_transcription_snapshot: dict[str, Any] = {}
         self.last_image_snapshot: dict[str, Any] = {"count": 0, "images": []}
         self.last_document_snapshot: dict[str, Any] = {"count": 0, "documents": []}
+        self.last_video_snapshot: dict[str, Any] = {"count": 0, "frames": []}
 
     async def reply(
         self,
@@ -403,6 +404,7 @@ class ModelClient:
             "text, and translate supported text. You cannot edit files, execute code, browse "
             "external sources, or inspect unsupported formats. Do not claim to have performed "
             "an unsupported file action. "
+            "Video capability guidance. For an attached video, use the supplied transcript and the five labeled frames as the available evidence. You can summarize, answer questions about visible events, and connect the transcript with visible frames. Do not claim to have watched every moment, recovered unclear audio, or inspected details that are not present in the transcript or frames. "
             f"The user's name is {user_name or 'the user'}. The person discussed is "
             f"{person_name or 'someone important to the user'}."
         )
@@ -443,6 +445,7 @@ class ModelClient:
                 content.append({"type": "input_text", "text": caption})
             image_diagnostics: list[dict[str, Any]] = []
             document_diagnostics: list[dict[str, Any]] = []
+            video_diagnostics: list[dict[str, Any]] = []
             for attachment in input_attachments:
                 if not attachment.local_path:
                     raise ValueError("Attachment is missing its temporary file")
@@ -469,6 +472,15 @@ class ModelClient:
                             "raw_bytes_retained": False,
                         }
                     )
+                    if attachment.source_type == "telegram_video_frame":
+                        video_diagnostics.append(
+                            {
+                                "filename": attachment.filename,
+                                "frame_index": attachment.frame_index,
+                                "duration_seconds": attachment.duration_seconds,
+                                "raw_bytes_retained": False,
+                            }
+                        )
                 else:
                     content.append(
                         {
@@ -499,6 +511,11 @@ class ModelClient:
                 "documents": document_diagnostics,
                 "raw_bytes_retained": False,
             }
+            self.last_video_snapshot = {
+                "count": len(video_diagnostics),
+                "frames": video_diagnostics,
+                "raw_bytes_retained": False,
+            }
         else:
             self.last_image_snapshot = {"count": 0, "images": [], "raw_bytes_retained": False}
             self.last_document_snapshot = {
@@ -506,6 +523,7 @@ class ModelClient:
                 "documents": [],
                 "raw_bytes_retained": False,
             }
+            self.last_video_snapshot = {"count": 0, "frames": [], "raw_bytes_retained": False}
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": prompt,
@@ -537,6 +555,7 @@ class ModelClient:
         snapshot_request["input"] = snapshot_input
         snapshot_request["image_diagnostics"] = self.last_image_snapshot
         snapshot_request["document_diagnostics"] = self.last_document_snapshot
+        snapshot_request["video_diagnostics"] = self.last_video_snapshot
         self.last_request_snapshot = snapshot_request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:

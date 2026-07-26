@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 from collections.abc import Awaitable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
@@ -71,6 +72,8 @@ SUPPORTED_DOCUMENTS = {
     ".csv": "text/csv",
     ".json": "application/json",
 }
+SUPPORTED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm"}
+VIDEO_FRAME_COUNT = 5
 
 
 def supported_document_type(filename: str, mime_type: str | None = None) -> str | None:
@@ -389,6 +392,162 @@ async def download_document(message: TelegramMessage, settings: Settings) -> Inb
     )
 
 
+async def run_media_command(command: list[str], timeout_seconds: int) -> tuple[bytes, bytes]:
+    process = await asyncio.create_subprocess_exec(
+        *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+    except TimeoutError as exc:
+        process.kill()
+        await process.wait()
+        raise RuntimeError("Video processing timed out") from exc
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip().splitlines()[-1:]
+        raise RuntimeError(detail[0] if detail else "Video processing failed")
+    return stdout, stderr
+
+
+async def inspect_video(path: str, settings: Settings) -> tuple[float, bool]:
+    if shutil.which("ffprobe") is None:
+        raise RuntimeError("Video processing tools are not installed")
+    stdout, _ = await run_media_command(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_type",
+            "-of",
+            "json",
+            path,
+        ],
+        settings.video_processing_timeout_seconds,
+    )
+    try:
+        metadata = json.loads(stdout.decode("utf-8"))
+        duration = float(metadata["format"]["duration"])
+        stream_types = {stream.get("codec_type") for stream in metadata.get("streams", [])}
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Could not read video metadata") from exc
+    if duration <= 0:
+        raise ValueError("Video duration is invalid")
+    if duration > settings.video_max_duration_seconds:
+        raise ValueError("Video is too long")
+    return duration, "audio" in stream_types
+
+
+async def download_video(
+    message: TelegramMessage, model_client: ModelClient, settings: Settings
+) -> InboundMessage:
+    video = message.video
+    if video is None or message.bot is None:
+        raise ValueError("Video message is not available")
+    filename = video.file_name or "wingman-video.mp4"
+    extension = Path(filename).suffix.casefold() or ".mp4"
+    if extension not in SUPPORTED_VIDEOS:
+        raise ValueError("This video format is not supported yet")
+    if video.file_size and video.file_size > settings.video_max_bytes:
+        raise ValueError("Video is too large")
+    remote_file = await message.bot.get_file(video.file_id)
+    if not remote_file.file_path:
+        raise RuntimeError("Telegram did not provide a video file path")
+    video_path = ""
+    audio_path = ""
+    frame_paths: list[str] = []
+    try:
+        with NamedTemporaryFile(prefix="wingman-video-", suffix=extension, delete=False) as file:
+            video_path = file.name
+        with open(video_path, "wb") as file:
+            await asyncio.wait_for(
+                message.bot.download_file(remote_file.file_path, destination=file),
+                timeout=settings.video_processing_timeout_seconds,
+            )
+        if Path(video_path).stat().st_size > settings.video_max_bytes:
+            raise ValueError("Video is too large")
+        duration, has_audio = await inspect_video(video_path, settings)
+        transcript = ""
+        if has_audio:
+            with NamedTemporaryFile(
+                prefix="wingman-video-audio-", suffix=".ogg", delete=False
+            ) as file:
+                audio_path = file.name
+            await run_media_command(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "16000",
+                    "-c:a",
+                    "libopus",
+                    audio_path,
+                ],
+                settings.video_processing_timeout_seconds,
+            )
+            transcript = await model_client.transcribe(
+                Path(audio_path).read_bytes(),
+                "wingman-video-audio.ogg",
+                settings.openai_transcription_model,
+            )
+        for index in range(VIDEO_FRAME_COUNT):
+            timestamp = duration * index / (VIDEO_FRAME_COUNT - 1)
+            with NamedTemporaryFile(
+                prefix=f"wingman-video-frame-{index + 1}-", suffix=".jpg", delete=False
+            ) as file:
+                frame_path = file.name
+            await run_media_command(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    f"{timestamp:.3f}",
+                    "-i",
+                    video_path,
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "2",
+                    frame_path,
+                ],
+                settings.video_processing_timeout_seconds,
+            )
+            frame_paths.append(frame_path)
+        text = message.caption or ""
+        if transcript:
+            text = f"{text}\n\n[Video transcript]\n{transcript}".strip()
+        attachments = tuple(
+            InboundAttachment(
+                source_type="telegram_video_frame",
+                provider_file_id=video.file_id,
+                filename=f"{Path(filename).stem}-frame-{index + 1}.jpg",
+                content_type="image/jpeg",
+                local_path=frame_path,
+                size_bytes=Path(frame_path).stat().st_size,
+                duration_seconds=duration,
+                frame_index=index + 1,
+                expires_at=datetime.now(UTC)
+                + timedelta(seconds=settings.attachment_retention_seconds),
+            )
+            for index, frame_path in enumerate(frame_paths)
+        )
+        frame_paths = []
+        return InboundMessage(
+            text=text,
+            source_type="telegram_video",
+            provider_message_id=message.message_id,
+            attachments=attachments,
+        )
+    finally:
+        for path in [video_path, audio_path, *frame_paths]:
+            if path:
+                Path(path).unlink(missing_ok=True)
+
+
 def build_dispatcher(settings: Settings) -> Dispatcher:
     dispatcher = Dispatcher()
     router = Router()
@@ -505,9 +664,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             and message.voice is None
             and not message.photo
             and not message.document
+            and message.video is None
         ):
             await message.answer(
-                "I can process text, voice, and image messages. "
+                "I can process text, voice, image, document, and video messages. "
                 "This message type is not supported yet."
             )
             return
@@ -549,6 +709,13 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     inbound = await with_typing(message, download_image_document(message, settings))
                 else:
                     inbound = await with_typing(message, download_document(message, settings))
+            elif message.video is not None:
+                if model_client is None:
+                    await message.answer("I need an OpenAI API key to analyze videos.")
+                    return
+                inbound = await with_typing(
+                    message, download_video(message, model_client, settings)
+                )
             else:
                 inbound = InboundMessage(
                     text=message.text or "",
@@ -565,7 +732,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             return
         transcription_snapshot = (
             dict(model_client.last_transcription_snapshot)
-            if model_client is not None and inbound.source_type == "telegram_voice"
+            if model_client is not None
+            and inbound.source_type in {"telegram_voice", "telegram_video"}
             else {}
         )
         with sessions() as session:

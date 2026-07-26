@@ -363,7 +363,7 @@ Delivered
 
 Video understanding pipeline
 
-Status pending
+Status complete
 
 - Accept supported video messages within strict size and duration limits.
 - Extract the audio track into a temporary buffer and transcribe it through the existing transcription path.
@@ -372,6 +372,15 @@ Status pending
 - Keep the video, extracted audio, and frame files temporary and delete them after success, failure, or timeout.
 - Return a useful error when video processing tools are unavailable or the media cannot be decoded.
 - Add diagnostics for duration, frame count, transcription status, model usage, and cleanup status without storing media bytes.
+
+Delivered
+
+- Added bounded MP4, MOV, M4V, and WebM video handling through Telegram.
+- Added ffprobe validation, duration limits, and timeout-bounded ffmpeg processing.
+- Added temporary audio extraction through the configured transcription model.
+- Added five evenly distributed JPEG frame samples and ordered multimodal model input.
+- Added sanitized video frame diagnostics and cleanup on success or failure.
+- Added regression tests for mixed transcript and frame input and invalid video metadata.
 
 ### Phase 3.8
 

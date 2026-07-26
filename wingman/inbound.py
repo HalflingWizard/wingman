@@ -19,6 +19,8 @@ class InboundAttachment:
     height: int | None = None
     estimated_characters: int | None = None
     page_count: int | None = None
+    duration_seconds: float | None = None
+    frame_index: int | None = None
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC) + timedelta(minutes=10))
 
 

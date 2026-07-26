@@ -46,7 +46,7 @@ The dashboard is server-rendered by FastAPI. A shared responsive layout provides
 
 The Context page edits static guidance and explains dynamic context at a high level. The Settings page persists selected runtime settings in the local `.env` file. The System page controls bot pause or resume, database backups, versioned JSON export and import, and safe Git updates.
 
-Telegram voice messages are downloaded into memory, sent to the configured Audio Transcriptions model, and then released. Audio is not written to the database or retained as a project file. Photos, videos, and documents remain unsupported.
+Telegram voice messages are downloaded into memory, sent to the configured Audio Transcriptions model, and then released. Audio is not written to the database or retained as a project file. Supported documents are sent as temporary file inputs. Supported videos are downloaded temporarily, split into audio and five sampled frames, then deleted after processing. Only attachment metadata is persisted.
 
 ## Persistence and portability
 
