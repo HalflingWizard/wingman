@@ -3,6 +3,8 @@
 # The dashboard CSS and JavaScript are kept inline so the local app has no build step.
 # ruff: noqa: E501
 
+import asyncio
+import importlib.metadata
 import json
 import threading
 from datetime import UTC, datetime, timedelta
@@ -33,6 +35,7 @@ from wingman.services import (
     create_saved_idea,
     delete_memory,
     delete_memory_note,
+    delete_planning_record,
     list_events,
     list_memories,
     list_memory_notes,
@@ -52,6 +55,148 @@ from wingman.system import (
     safe_update,
     write_update_status,
 )
+from wingman.telegram_bot import MESSAGE_BATCH_WINDOW_SECONDS, media_tool_path
+
+HEALTH_DEPENDENCIES = (
+    ("aiogram", "Telegram client"),
+    ("openai", "OpenAI client"),
+    ("fastapi", "Dashboard server"),
+    ("sqlalchemy", "Database layer"),
+    ("pydantic-settings", "Configuration"),
+)
+
+
+def dependency_status() -> list[dict[str, str]]:
+    results = []
+    for package, purpose in HEALTH_DEPENDENCIES:
+        try:
+            version = importlib.metadata.version(package)
+            results.append(
+                {"name": package, "purpose": purpose, "status": "pass", "detail": version}
+            )
+        except importlib.metadata.PackageNotFoundError:
+            results.append(
+                {"name": package, "purpose": purpose, "status": "fail", "detail": "Not installed"}
+            )
+    for tool in ("ffmpeg", "ffprobe"):
+        results.append(
+            {
+                "name": tool,
+                "purpose": "Video processing",
+                "status": "pass" if media_tool_path(tool) else "fail",
+                "detail": media_tool_path(tool) or "Not installed",
+            }
+        )
+    return results
+
+
+async def check_telegram_connection(settings: Settings) -> str:
+    if not settings.telegram_bot_token:
+        raise RuntimeError("Telegram bot token is not configured")
+    from aiogram import Bot
+
+    async with Bot(settings.telegram_bot_token) as bot:
+        bot_info = await bot.get_me()
+    return f"Connected as @{bot_info.username or bot_info.first_name}"
+
+
+async def check_openai_connection(settings: Settings) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("OpenAI API key is not configured")
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=10.0, max_retries=0)
+    try:
+        models = await client.models.list()
+        return f"Connected, {len(models.data)} models visible"
+    finally:
+        await client.close()
+
+
+def persistence_check(settings: Settings, check_name: str) -> str:
+    with session_factory(settings)() as session:
+        user = None
+        if settings.telegram_owner_id is None:
+            raise RuntimeError("Telegram owner ID is not configured")
+        user = web_user_for_check(session, settings)
+        marker = f"__wingman_health_check_{check_name}__"
+        if check_name == "memory":
+            memory_record = create_memory(session, user, marker)
+            delete_memory(session, user, memory_record.id)
+        else:
+            place = create_place(session, user, marker)
+            if check_name == "place":
+                delete_planning_record(session, user, "place", place.id)
+            elif check_name == "idea":
+                idea_record = create_saved_idea(session, user, marker, "health check", place.id)
+                delete_planning_record(session, user, "idea", idea_record.id)
+                delete_planning_record(session, user, "place", place.id)
+            elif check_name == "event":
+                event_record = create_event(
+                    session,
+                    user,
+                    marker,
+                    datetime.now(UTC) + timedelta(minutes=5),
+                    place_id=place.id,
+                )
+                delete_planning_record(session, user, "event", event_record.id)
+                delete_planning_record(session, user, "place", place.id)
+            elif check_name == "reminder":
+                reminder_record = create_reminder(
+                    session, user, marker, datetime.now(UTC) + timedelta(minutes=5)
+                )
+                delete_planning_record(session, user, "reminder", reminder_record.id)
+                delete_planning_record(session, user, "place", place.id)
+            else:
+                raise RuntimeError("Unknown persistence check")
+    return "Created, verified, and removed a temporary record"
+
+
+def web_user_for_check(session: Session, settings: Settings) -> User:
+    user = session.scalar(select(User).where(User.telegram_user_id == settings.telegram_owner_id))
+    if user is None:
+        user = User(telegram_user_id=settings.telegram_owner_id, name=settings.user_name)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    return user
+
+
+def run_health_check(settings: Settings, name: str) -> dict[str, str]:
+    goals = {
+        "telegram": "Telegram getMe succeeds without sending a message",
+        "openai": "OpenAI model listing succeeds without a completion",
+        "video": "ffmpeg and ffprobe are available",
+        "voice": "A transcription model is configured",
+        "queue": "The message batching window is configured",
+        "memory": "Memory persistence can create, verify, and clean up a record",
+        "place": "Place persistence can create, verify, and clean up a record",
+        "idea": "Saved idea persistence can create, verify, and clean up a record",
+        "event": "Event persistence can create, verify, and clean up a record",
+        "reminder": "Reminder persistence can create, verify, and clean up a record",
+    }
+    try:
+        if name == "telegram":
+            detail = asyncio.run(check_telegram_connection(settings))
+        elif name == "openai":
+            detail = asyncio.run(check_openai_connection(settings))
+        elif name == "video":
+            if not media_tool_path("ffmpeg") or not media_tool_path("ffprobe"):
+                raise RuntimeError("ffmpeg or ffprobe is not installed")
+            detail = "ffmpeg and ffprobe are available"
+        elif name == "voice":
+            if not settings.openai_transcription_model:
+                raise RuntimeError("No transcription model is configured")
+            detail = settings.openai_transcription_model
+        elif name == "queue":
+            if MESSAGE_BATCH_WINDOW_SECONDS <= 0:
+                raise RuntimeError("Message batching is disabled")
+            detail = f"{MESSAGE_BATCH_WINDOW_SECONDS:.1f} second debounce window"
+        else:
+            detail = persistence_check(settings, name)
+        return {"name": name, "goal": goals[name], "status": "pass", "detail": detail}
+    except Exception as exc:
+        return {"name": name, "goal": goals[name], "status": "fail", "detail": str(exc)}
 
 
 def code_panel(label: str, content: str, max_height: int = 420) -> str:
@@ -177,6 +322,7 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         ".usage-day{display:grid;grid-template-columns:7rem 1fr 6rem;gap:.7rem;align-items:center;margin:.75rem 0;font-size:.82rem}.usage-bar{height:1rem;display:flex;overflow:hidden;border-radius:999px;background:#eef1f7}.usage-bar span{height:100%}table{width:100%;border-collapse:collapse;font-size:.83rem}th,td{text-align:left;padding:.65rem;border-bottom:1px solid #edf0f5;white-space:nowrap}th{color:#53627b;background:#f7f9fc}"
         ".usage-axis{color:#68778d;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}.usage-chart{height:220px;display:flex;align-items:end;gap:.65rem;padding:1rem .5rem 0;border-bottom:1px solid #cbd4e2}.usage-column{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:end;gap:.35rem;min-width:2.3rem}.usage-column-value{font-size:.68rem;color:#68778d;white-space:nowrap}.usage-column-bar{width:70%;min-height:0;border-radius:.45rem .45rem 0 0;background:linear-gradient(180deg,#7787f4,#5968df)}.usage-column small{color:#68778d;font-size:.7rem}.usage-chart-x{text-align:center;color:#68778d;font-size:.75rem;margin-top:.5rem}.active{box-shadow:inset 0 0 0 2px #5968df}"
         ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
+        ".health-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin-top:1rem}.health-check{padding:.9rem;border:1px solid #edf0f5;border-radius:.7rem;background:#fbfcfe}.health-check strong{display:block}.health-check small{display:block;color:#68778d;margin-top:.2rem}.health-check p{min-height:2.4rem}.health-check .badge{background:#eef1f8;color:#68778d}.health-check .record-top{margin-bottom:.3rem}.health-check form{margin:0}@media(max-width:760px){.health-check-grid{grid-template-columns:1fr}}"
         "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
         "</style><script>"
         "function copyCode(id,button){const value=document.getElementById(id).textContent; navigator.clipboard.writeText(value).then(()=>{const old=button.textContent;button.textContent='Copied';setTimeout(()=>button.textContent=old,1200);});}"
@@ -206,6 +352,7 @@ def redact_diagnostic(value: object) -> object:
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title="Wingman", version=__version__)
+    health_results: dict[str, dict[str, str]] = {}
 
     @app.middleware("http")
     async def prevent_dashboard_caching(request: Request, call_next: Any) -> Response:
@@ -249,6 +396,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         openai = "configured" if active_settings.openai_api_key else "not configured"
         bot_state = "paused" if is_paused(active_settings) else "running"
+        dependencies = dependency_status()
+        dependency_rows = "".join(
+            f"<div class='item-row'><i class='fa-solid fa-{'circle-check' if item['status'] == 'pass' else 'circle-xmark'}'></i><div><strong>{escape(item['name'])}</strong><small>{escape(item['purpose'])} · {escape(item['detail'])}</small></div></div>"
+            for item in dependencies
+        )
+        check_names = (
+            "telegram",
+            "openai",
+            "video",
+            "voice",
+            "queue",
+            "memory",
+            "place",
+            "idea",
+            "event",
+            "reminder",
+        )
+        check_rows = "".join(
+            "<article class='health-check'>"
+            f"<div class='record-top'><div><strong>{escape(name.capitalize())}</strong><small>{escape(health_results.get(name, {}).get('goal', 'Not run yet'))}</small></div>"
+            f"<span class='badge'>{escape(health_results.get(name, {}).get('status', 'not run'))}</span></div>"
+            f"<p class='muted'>{escape(health_results.get(name, {}).get('detail', 'Run this check to verify the current system.'))}</p>"
+            f"<form method='post' action='/health/check/{name}'><button class='button-secondary'>Test</button></form></article>"
+            for name in check_names
+        )
         body = (
             f"<header class='page-header'><div><p class='eyebrow'>System overview</p>"
             f"<h1>Health</h1><p class='muted'>A quick view of the local services Wingman uses.</p></div>"
@@ -260,8 +432,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-power-off'></i></div><span class='stat-value'>{escape(bot_state)}</span><span class='stat-label'>Bot state</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-code-branch'></i></div><span class='stat-value'>{escape(revision['commit'][:12])}</span><span class='stat-label'>Loaded commit</span></div>"
             "</div>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-boxes-stacked'></i> Dependencies</h2><span class='muted'>Installed versions</span></div>"
+            f"<div class='item-list'>{dependency_rows}</div></section>"
+            "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-vial'></i> Functional checks</h2><p class='muted'>Checks use no model completions. Persistence checks create and remove temporary records.</p></div>"
+            "<form method='post' action='/health/check-all'><button><i class='fa-solid fa-list-check'></i> Test all</button></form></div>"
+            f"<div class='health-check-grid'>{check_rows}</div></section>"
         )
         return page_shell("Health", body, "health")
+
+    @app.post("/health/check/{name}", response_class=HTMLResponse)
+    def health_check(name: str) -> str:
+        allowed = {
+            "telegram",
+            "openai",
+            "video",
+            "voice",
+            "queue",
+            "memory",
+            "place",
+            "idea",
+            "event",
+            "reminder",
+        }
+        if name not in allowed:
+            raise HTTPException(status_code=404, detail="Unknown health check")
+        health_results[name] = run_health_check(active_settings, name)
+        return health()
+
+    @app.post("/health/check-all", response_class=HTMLResponse)
+    def health_check_all() -> str:
+        for name in (
+            "telegram",
+            "openai",
+            "video",
+            "voice",
+            "queue",
+            "memory",
+            "place",
+            "idea",
+            "event",
+            "reminder",
+        ):
+            health_results[name] = run_health_check(active_settings, name)
+        return health()
 
     def web_user(session: Session) -> User:
         if active_settings.telegram_owner_id is None:

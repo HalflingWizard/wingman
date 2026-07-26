@@ -75,6 +75,7 @@ SUPPORTED_DOCUMENTS = {
 }
 SUPPORTED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm"}
 VIDEO_FRAME_COUNT = 5
+MESSAGE_BATCH_WINDOW_SECONDS = 1.0
 
 
 def supported_document_type(filename: str, mime_type: str | None = None) -> str | None:
@@ -577,7 +578,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             if chat_id in batch_leaders:
                 return None
             batch_leaders.add(chat_id)
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(MESSAGE_BATCH_WINDOW_SECONDS)
         async with batch_lock:
             batch = batch_buffers.pop(chat_id, [])
             batch_leaders.discard(chat_id)
