@@ -12,6 +12,7 @@ from html import escape
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
+from zoneinfo import available_timezones
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
@@ -42,6 +43,7 @@ from wingman.services import (
     list_places,
     list_reminders,
     list_saved_ideas,
+    message_display_text,
     update_memory,
     update_memory_note,
 )
@@ -199,6 +201,21 @@ def run_health_check(settings: Settings, name: str) -> dict[str, str]:
         return {"name": name, "goal": goals[name], "status": "fail", "detail": str(exc)}
 
 
+TIMEZONE_CITIES = {
+    "Philadelphia, PA, USA": "America/New_York",
+    "New York, NY, USA": "America/New_York",
+    "Chicago, IL, USA": "America/Chicago",
+    "Denver, CO, USA": "America/Denver",
+    "Phoenix, AZ, USA": "America/Phoenix",
+    "Los Angeles, CA, USA": "America/Los_Angeles",
+    "Toronto, ON, Canada": "America/Toronto",
+    "London, UK": "Europe/London",
+    "Paris, France": "Europe/Paris",
+    "Tokyo, Japan": "Asia/Tokyo",
+    "Sydney, Australia": "Australia/Sydney",
+}
+
+
 def code_panel(label: str, content: str, max_height: int = 420) -> str:
     panel_id = f"code-{uuid4().hex}"
     return (
@@ -321,7 +338,7 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
         ".usage-day{display:grid;grid-template-columns:7rem 1fr 6rem;gap:.7rem;align-items:center;margin:.75rem 0;font-size:.82rem}.usage-bar{height:1rem;display:flex;overflow:hidden;border-radius:999px;background:#eef1f7}.usage-bar span{height:100%}table{width:100%;border-collapse:collapse;font-size:.83rem}th,td{text-align:left;padding:.65rem;border-bottom:1px solid #edf0f5;white-space:nowrap}th{color:#53627b;background:#f7f9fc}"
         ".usage-axis{color:#68778d;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}.usage-chart{height:220px;display:flex;align-items:end;gap:.65rem;padding:1rem .5rem 0;border-bottom:1px solid #cbd4e2}.usage-column{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:end;gap:.35rem;min-width:2.3rem}.usage-column-value{font-size:.68rem;color:#68778d;white-space:nowrap}.usage-column-bar{width:70%;min-height:0;border-radius:.45rem .45rem 0 0;background:linear-gradient(180deg,#7787f4,#5968df)}.usage-column small{color:#68778d;font-size:.7rem}.usage-chart-x{text-align:center;color:#68778d;font-size:.75rem;margin-top:.5rem}.active{box-shadow:inset 0 0 0 2px #5968df}"
-        ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
+        ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
         ".health-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin-top:1rem}.health-check{padding:.9rem;border:1px solid #edf0f5;border-radius:.7rem;background:#fbfcfe}.health-check strong{display:block}.health-check small{display:block;color:#68778d;margin-top:.2rem}.health-check p{min-height:2.4rem}.health-check .badge{background:#eef1f8;color:#68778d}.health-check .record-top{margin-bottom:.3rem}.health-check form{margin:0}@media(max-width:760px){.health-check-grid{grid-template-columns:1fr}}"
         "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
         "</style><script>"
@@ -799,6 +816,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def mask(value: str) -> str:
             return "configured" if value else "not configured"
 
+        timezone_options = "".join(
+            f"<option value='{escape(zone, quote=True)}'{' selected' if zone == active_settings.timezone else ''}>{escape(zone.replace('_', ' ').replace('/', ' / '))}</option>"
+            for zone in sorted(available_timezones())
+        )
+        city_options = "".join(
+            f"<option value='{escape(city, quote=True)}'></option>" for city in TIMEZONE_CITIES
+        )
+        city_map = json.dumps(TIMEZONE_CITIES)
+
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Configuration</p><h1>Settings</h1>"
             "<p class='muted'>Runtime values are read from the environment. Secrets stay masked here.</p></div></header>"
@@ -810,10 +836,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<label class='field'>Telegram owner ID <input name='telegram_owner_id' value='{escape(str(active_settings.telegram_owner_id or ''))}'></label>"
             f"<label class='field'>Your name <input name='user_name' value='{escape(active_settings.user_name, quote=True)}'></label>"
             f"<label class='field'>Primary person's name <input name='primary_person_name' value='{escape(active_settings.primary_person_name, quote=True)}'></label>"
-            "<h2 class='section-title'><i class='fa-solid fa-microchip'></i> Models and time</h2>"
+            "<h2 class='section-title'><i class='fa-solid fa-microchip'></i> Models</h2>"
             f"<label class='field'>Main model <input name='openai_main_model' value='{escape(active_settings.openai_main_model, quote=True)}'></label>"
             f"<label class='field'>Summary model <input name='openai_summary_model' value='{escape(active_settings.openai_summary_model, quote=True)}'></label>"
-            f"<label class='field'>Timezone <input name='timezone' value='{escape(active_settings.timezone, quote=True)}'></label></div>"
+            "<h2 class='section-title'><i class='fa-solid fa-location-dot'></i> Local settings</h2>"
+            f"<label class='field'>City or location <input id='timezone-city' list='timezone-cities' placeholder='Start typing a city, for example Philadelphia'><datalist id='timezone-cities'>{city_options}</datalist></label>"
+            f"<label class='field'>Timezone <select id='timezone-select' name='timezone'>{timezone_options}</select></label></div>"
+            f"<script>const timezoneCities={city_map};document.querySelector('#timezone-city').addEventListener('change',event=>{{const zone=timezoneCities[event.target.value];if(zone)document.querySelector('#timezone-select').value=zone;}});</script>"
             "<p><button><i class='fa-solid fa-floppy-disk'></i> Save settings</button></p></form></section>"
             "<section class='panel'><p>This dashboard is local-only. Blank secret fields keep the current values. Settings are stored in the local .env file, which is plaintext and should not be exposed.</p></section>"
         )
@@ -1241,7 +1270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 messages = "".join(
                     f"<div class='message message-{'user' if message.sender == 'user' else 'assistant'}'>"
                     f"<div class='message-label'><i class='fa-solid fa-{'user' if message.sender == 'user' else 'robot'}'></i>"
-                    f"{escape(message.sender.capitalize())}</div><p>{escape(message.text)}</p></div>"
+                    f"{escape(message.sender.capitalize())}</div><p>{escape(message_display_text(session, message))}</p></div>"
                     for message in reversed(recent_messages)
                 )
                 cards.append(

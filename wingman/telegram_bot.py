@@ -54,6 +54,7 @@ from wingman.services import (
     get_owned_planning_record,
     mark_card_cleaned,
     mark_card_deleted,
+    message_display_text,
     pending_deleted_cards,
     planning_context,
     save_message_attachments,
@@ -707,6 +708,21 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         )
         message = primary
         assert message.from_user is not None
+        owner_id = message.from_user.id
+
+        def record_dashboard_status(user_text: str, assistant_text: str) -> None:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                conversation = get_or_create_conversation(session, user)
+                add_message(session, conversation, "user", user_text, message.message_id)
+                add_message(session, conversation, "assistant", assistant_text)
+
+        def record_dashboard_assistant(assistant_text: str) -> None:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                conversation = get_or_create_conversation(session, user)
+                add_message(session, conversation, "assistant", assistant_text)
+
         additional_text = [
             item.text or "" for item in batch if item is not primary and (item.text or "").strip()
         ]
@@ -718,17 +734,22 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             and message.video is None
             and message.video_note is None
         ):
-            await message.answer(
+            reply = (
                 "I can process text, voice, image, document, and video messages. "
                 "I cannot process that message type."
             )
+            record_dashboard_status(message.text or "[unsupported message]", reply)
+            await message.answer(reply)
             return
-        owner_id = message.from_user.id
         if is_paused(settings):
-            await message.answer("I am paused for now. I will be back soon.")
+            reply = "I am paused for now. I will be back soon."
+            record_dashboard_status(message.text or "[message while paused]", reply)
+            await message.answer(reply)
             return
         if model_client is None and message.voice is not None:
-            await message.answer("I need an OpenAI API key to transcribe voice messages.")
+            reply = "I need an OpenAI API key to transcribe voice messages."
+            record_dashboard_status(message.caption or "[voice message]", reply)
+            await message.answer(reply)
             return
         try:
             if message.voice is not None:
@@ -738,7 +759,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
             elif message.photo:
                 if model_client is None:
-                    await message.answer("I need an OpenAI API key to analyze images.")
+                    reply = "I need an OpenAI API key to analyze images."
+                    record_dashboard_status(message.caption or "[image message]", reply)
+                    await message.answer(reply)
                     return
                 if message.media_group_id:
                     group_id = message.media_group_id
@@ -761,7 +784,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     inbound = await with_typing(message, download_photo(message, settings))
             elif message.document:
                 if model_client is None:
-                    await message.answer("I need an OpenAI API key to analyze files.")
+                    reply = "I need an OpenAI API key to analyze files."
+                    record_dashboard_status(message.caption or "[document message]", reply)
+                    await message.answer(reply)
                     return
                 if (message.document.mime_type or "").casefold().startswith("image/"):
                     inbound = await with_typing(message, download_image_document(message, settings))
@@ -769,14 +794,18 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     inbound = await with_typing(message, download_document(message, settings))
             elif message.video is not None:
                 if model_client is None:
-                    await message.answer("I need an OpenAI API key to analyze videos.")
+                    reply = "I need an OpenAI API key to analyze videos."
+                    record_dashboard_status(message.caption or "[video message]", reply)
+                    await message.answer(reply)
                     return
                 inbound = await with_typing(
                     message, download_video(message, model_client, settings)
                 )
             elif message.video_note is not None:
                 if model_client is None:
-                    await message.answer("I need an OpenAI API key to analyze videos.")
+                    reply = "I need an OpenAI API key to analyze videos."
+                    record_dashboard_status(message.caption or "[video message]", reply)
+                    await message.answer(reply)
                     return
                 inbound = await with_typing(
                     message, download_video(message, model_client, settings)
@@ -794,10 +823,14 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
             await send_typing(message)
         except (RuntimeError, ValueError) as exc:
-            await message.answer(f"I could not process that input. {exc}")
+            reply = f"I could not process that input. {exc}"
+            record_dashboard_status(message.caption or "[media message]", reply)
+            await message.answer(reply)
             return
         if len(inbound.attachments) > settings.max_attachments:
-            await message.answer("I can process only a small number of attachments at a time.")
+            reply = "I can process only a small number of attachments at a time."
+            record_dashboard_assistant(reply)
+            await message.answer(reply)
             cleanup_inbound_attachments(inbound)
             return
         transcription_snapshot = (
@@ -892,13 +925,16 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             existing_summary = summary.summary_text
             summary_message_ids = [item.id for item in summary_messages]
             summary_through_id = summary_messages[-1].id if summary_messages else None
+            summary_payload = [
+                (item.sender, message_display_text(session, item)) for item in summary_messages
+            ]
         if model_client is not None and summary_needed:
             summary_started = perf_counter()
             summary_request = json.dumps(
                 {
                     "type": "rolling_summary",
                     "existing_summary": existing_summary,
-                    "messages": [(item.sender, item.text) for item in summary_messages],
+                    "messages": summary_payload,
                 },
                 sort_keys=True,
             )
@@ -916,7 +952,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     message,
                     model_client.summarize(
                         existing_summary,
-                        [(item.sender, item.text) for item in summary_messages],
+                        summary_payload,
                     ),
                 )
                 with sessions() as session:
@@ -975,7 +1011,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             )
             history = built_context.messages
         if model_client is None:
-            await message.answer("I am connected, but the OpenAI API key is not configured yet.")
+            reply = "I am connected, but the OpenAI API key is not configured yet."
+            record_dashboard_assistant(reply)
+            await message.answer(reply)
             cleanup_inbound_attachments(inbound)
             return
         request_snapshot = json.dumps(
@@ -1032,7 +1070,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     input_tokens=model_client.last_usage[0],
                     output_tokens=model_client.last_usage[1],
                 )
-            await message.answer("I ran into a problem while replying. Please try again.")
+            reply = "I ran into a problem while replying. Please try again."
+            record_dashboard_assistant(reply)
+            await message.answer(reply)
             cleanup_inbound_attachments(inbound)
             return
         with sessions() as session:

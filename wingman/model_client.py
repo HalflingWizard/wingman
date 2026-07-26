@@ -662,9 +662,15 @@ class ModelClient:
         response = await self.client.responses.create(
             model=self.summary_model,
             instructions=(
-                "Update a concise rolling conversation summary. Keep current topic, user goal, "
-                "emotional context, decisions, corrections, open questions, commitments, and "
-                "temporary details. Do not repeat durable memories unnecessarily."
+                "Update a detailed rolling conversation summary for continuity. This is internal "
+                "conversation state, not a memory-save request and not a user-facing reply. Keep "
+                "the current topic, user goal, emotional context, decisions, corrections, open "
+                "questions, commitments, plans, places, dates, and useful temporary details. "
+                "Preserve who said each important detail. Include media placeholders such as "
+                "[3 photos], [voice message], [video], or [2 documents] when they appear. "
+                "Merge the existing summary with the new messages, remove contradictions, and "
+                "avoid repeating durable memories that are already stored separately. Never "
+                "write instructions to save a memory and never address the owner directly."
             ),
             input=f"Existing summary\n{existing_summary}\n\nMessages\n{input_text}",
             reasoning={"effort": "low", "summary": "auto"},

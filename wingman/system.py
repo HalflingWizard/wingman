@@ -325,8 +325,10 @@ def safe_update(settings: Settings) -> str:
     root = Path(__file__).resolve().parent.parent
     logs: list[str] = []
     write_update_status(settings, "running", ["Checking the working tree"])
-    clean = subprocess.run(["git", "diff", "--quiet"], cwd=root, check=False)
-    if clean.returncode != 0:
+    clean = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True, text=True
+    )
+    if clean.stdout.strip():
         write_update_status(
             settings,
             "failed",
@@ -343,7 +345,9 @@ def safe_update(settings: Settings) -> str:
         pull = subprocess.run(
             ["git", "pull", "--ff-only"], cwd=root, check=True, capture_output=True, text=True
         )
-        logs.extend(line for line in pull.stdout.splitlines() if line.strip())
+        logs.extend(line for line in (pull.stdout + pull.stderr).splitlines() if line.strip())
+        revision = repository_version()
+        logs.append(f"Loaded commit {revision['commit']} {revision['message']}")
         logs.append("Installing the current project and development dependencies")
         write_update_status(settings, "running", logs, branch=branch)
         install = subprocess.run(
@@ -355,6 +359,14 @@ def safe_update(settings: Settings) -> str:
         )
         logs.extend(line for line in install.stdout.splitlines() if line.strip())
         ensure_media_tools(settings, logs)
+        verification = subprocess.run(
+            [".venv/bin/python", "-c", "import wingman; print(wingman.__version__)"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        logs.append(f"Installed Wingman package version {verification.stdout.strip()}")
     except subprocess.CalledProcessError as exc:
         output = (exc.stdout or "") + (exc.stderr or "")
         logs.extend(line for line in output.splitlines() if line.strip())

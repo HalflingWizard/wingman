@@ -103,6 +103,37 @@ def save_message_attachments(
     return records
 
 
+def message_display_text(session: Session, message: Message) -> str:
+    """Return a readable conversation representation including media placeholders."""
+    attachments = list(
+        session.scalars(select(MessageAttachment).where(MessageAttachment.message_id == message.id))
+    )
+    counts = {"photo": 0, "document": 0, "voice": 0, "video": 0}
+    for attachment in attachments:
+        source = attachment.source_type
+        if source == "telegram_voice":
+            counts["voice"] += 1
+        elif source in {"telegram_video", "telegram_video_frame"}:
+            counts["video"] += 1
+        elif source == "telegram_image" or attachment.content_type.startswith("image/"):
+            counts["photo"] += 1
+        elif source == "telegram_document":
+            counts["document"] += 1
+    labels = []
+    for key, label in (
+        ("photo", "photo"),
+        ("document", "document"),
+        ("voice", "voice message"),
+        ("video", "video"),
+    ):
+        count = counts[key]
+        if count:
+            labels.append(f"{count} {label}{'' if count == 1 else 's'}")
+    prefix = f"[{', '.join(labels)}]" if labels else ""
+    text = message.text.strip()
+    return f"{prefix}\n{text}".strip() if prefix and text else prefix or text
+
+
 MEMORY_STATUSES = {"confirmed", "observed", "inferred", "uncertain", "corrected", "deleted"}
 MEMORY_TYPES = {
     "fact",
