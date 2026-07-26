@@ -1,6 +1,20 @@
 # Implementation plan
 
-Wingman 4.4.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.2.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.2 completed
+
+- Added `/ideas` and `/reminders` Telegram commands.
+- Added paginated five-item menus for all four planning record types.
+- Added full detail cards for selected ideas and reminders.
+- Recorded verified planning selections as user-context messages for the next model request.
+
+## Phase 5.1 completed
+
+- Added `/places` and `/events` Telegram commands.
+- Added five-item paginated inline menus with Previous and Next controls.
+- Added full detail cards for selected places and events, including the existing delete control.
+- Added ownership checks before listing, viewing, or deleting planning records.
 
 ## Product requirements
 

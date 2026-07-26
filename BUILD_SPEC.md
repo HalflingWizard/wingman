@@ -1,6 +1,6 @@
 # Build a local Telegram wingman agent with a web administration interface
 
-The completed application is Wingman 4.4.0. This document describes the product requirements that define the implementation.
+The completed application is Wingman 5.2.0. This document describes the product requirements that define the implementation.
 
 The current implementation also includes controlled model memory and planning tools, memory proposals, source-linked notes, rolling conversation summaries, retrieval inspection, a responsive dashboard, editable context guidance, local settings editing, JSON import and export, backups, lifecycle controls, port fallback, temporary attachment handling, and release diagnostics.
 
@@ -605,18 +605,14 @@ Build dynamic context for every turn from
 - Recent raw messages
 - Rolling conversation summary
 - Pending conversational state
-- Relevant memories
-- Relevant memory notes
-- Relevant places
-- Relevant events
-- Relevant saved ideas
-- Relevant reminders
+- Results returned by model-requested memory searches
+- Results returned by model-requested planning searches
 - Recent completed events
 - Upcoming important events
 
 The context builder must enforce configurable token budgets.
 
-Do not send the entire database to the model.
+Do not send the entire database to the model. Do not preload unrelated saved records.
 
 ## Conversation history and summarization
 

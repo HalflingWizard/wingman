@@ -206,15 +206,44 @@ def log_retrieval(
     session.commit()
 
 
-def retrieval_context_usage(results: list[RetrievalResult], answer: str) -> dict[str, object]:
+def retrieval_context_usage(
+    results: list[RetrievalResult],
+    answer: str,
+    tool_trace: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     answer_words = _words(answer)
     retrieved_ids = [result.memory.id for result in results]
+    statements = {result.memory.id: result.memory.statement for result in results}
+    if tool_trace:
+        for trace in tool_trace:
+            if trace.get("name") != "search_memories":
+                continue
+            output = trace.get("output")
+            if not isinstance(output, dict) or not output.get("ok"):
+                continue
+            result = output.get("result")
+            if not isinstance(result, dict):
+                continue
+            memories = result.get("memories")
+            if not isinstance(memories, list):
+                continue
+            for memory in memories:
+                if not isinstance(memory, dict):
+                    continue
+                memory_id = memory.get("memory_id")
+                statement = memory.get("statement")
+                if isinstance(memory_id, str) and isinstance(statement, str):
+                    retrieved_ids.append(memory_id)
+                    statements[memory_id] = statement
+    retrieved_ids = list(dict.fromkeys(retrieved_ids))
     used_ids = [
-        result.memory.id for result in results if _words(result.memory.statement) & answer_words
+        memory_id
+        for memory_id in retrieved_ids
+        if _words(statements.get(memory_id, "")) & answer_words
     ]
     return {
         "retrieved_memory_ids": retrieved_ids,
         "mentioned_memory_ids": used_ids,
         "unmentioned_memory_ids": [item for item in retrieved_ids if item not in used_ids],
-        "method": "word-overlap heuristic",
+        "method": "model-directed tool retrieval with answer overlap diagnostic",
     }

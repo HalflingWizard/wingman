@@ -48,6 +48,10 @@ from wingman.services import (
     get_or_create_user,
     get_owned_memory,
     get_owned_planning_record,
+    list_events,
+    list_places,
+    list_reminders,
+    list_saved_ideas,
     mark_card_cleaned,
     mark_card_deleted,
     message_display_text,
@@ -77,6 +81,7 @@ VIDEO_FRAME_COUNT = 5
 # Telegram may deliver separate photos and their caption as distinct updates.
 # Three seconds gives the group time to arrive without making normal replies feel slow.
 MESSAGE_BATCH_WINDOW_SECONDS = 3.0
+PLANNING_PAGE_SIZE = 5
 
 
 def supported_document_type(filename: str, mime_type: str | None = None) -> str | None:
@@ -171,6 +176,56 @@ def planning_card(
         ]
     )
     return text, keyboard
+
+
+def planning_list_view(
+    entity_type: str,
+    records: list[Place] | list[SavedIdea] | list[Event] | list[Reminder],
+    page: int = 0,
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Build a five-item paginated menu for places or events."""
+    if entity_type not in {"place", "idea", "event", "reminder"}:
+        raise ValueError("Unsupported planning list")
+    total_pages = max(1, (len(records) + PLANNING_PAGE_SIZE - 1) // PLANNING_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * PLANNING_PAGE_SIZE
+    page_records = records[start : start + PLANNING_PAGE_SIZE]
+    icons = {"place": "📍", "idea": "💡", "event": "📅", "reminder": "⏰"}
+    labels = {"place": "Places", "idea": "Ideas", "event": "Events", "reminder": "Reminders"}
+    icon = icons[entity_type]
+    label = labels[entity_type]
+    titles = {
+        "place": lambda record: record.name,
+        "idea": lambda record: record.title,
+        "event": lambda record: record.title,
+        "reminder": lambda record: record.title,
+    }
+    text = f"{icon} {label} · page {page + 1} of {total_pages}"
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{icon} {titles[entity_type](record)[:60]}",
+                callback_data=f"planning:view:{entity_type}:{record.id}:{page}",
+            )
+        ]
+        for record in page_records
+    ]
+    navigation = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(
+                text="◀ Previous", callback_data=f"planning:page:{entity_type}:{page - 1}"
+            )
+        )
+    if page < total_pages - 1:
+        navigation.append(
+            InlineKeyboardButton(
+                text="Next ▶", callback_data=f"planning:page:{entity_type}:{page + 1}"
+            )
+        )
+    if navigation:
+        buttons.append(navigation)
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 async def send_typing(message: TelegramMessage) -> None:
@@ -712,6 +767,50 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             "The current conversation is cleared. Saved memories and plans remain."
         )
 
+    def list_planning_records(session: Any, user: Any, entity_type: str) -> list[Any]:
+        if entity_type == "place":
+            return list_places(session, user)
+        if entity_type == "idea":
+            return list_saved_ideas(session, user)
+        if entity_type == "event":
+            return list_events(session, user)
+        return list_reminders(session, user)
+
+    async def send_planning_list(message: TelegramMessage, entity_type: str) -> None:
+        if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
+            return
+        with sessions() as session:
+            user = get_or_create_user(session, message.from_user.id, settings.user_name)
+            records = list_planning_records(session, user, entity_type)
+        if not records:
+            empty_texts = {
+                "place": "📍 No saved places yet.",
+                "idea": "💡 No saved ideas yet.",
+                "event": "📅 No events yet.",
+                "reminder": "⏰ No reminders yet.",
+            }
+            empty_text = empty_texts[entity_type]
+            await message.answer(empty_text)
+            return
+        text, keyboard = planning_list_view(entity_type, records)
+        await message.answer(text, reply_markup=keyboard)
+
+    @router.message(Command("places"))
+    async def places(message: TelegramMessage) -> None:
+        await send_planning_list(message, "place")
+
+    @router.message(Command("events"))
+    async def events(message: TelegramMessage) -> None:
+        await send_planning_list(message, "event")
+
+    @router.message(Command("ideas"))
+    async def ideas(message: TelegramMessage) -> None:
+        await send_planning_list(message, "idea")
+
+    @router.message(Command("reminders"))
+    async def reminders(message: TelegramMessage) -> None:
+        await send_planning_list(message, "reminder")
+
     @router.callback_query(F.data.startswith("memory:"))
     async def memory_callback(callback: CallbackQuery) -> None:
         if (
@@ -759,24 +858,78 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         ):
             await callback.answer()
             return
-        parts = (callback.data or "").split(":", 3)
-        if len(parts) != 4 or parts[1] != "delete":
+        parts = (callback.data or "").split(":")
+        if len(parts) < 4:
             await callback.answer("Nothing changed")
             return
-        _, _, entity_type, entity_id = parts
-        with sessions() as session:
-            user = get_or_create_user(session, callback.from_user.id, settings.user_name)
-            name = delete_planning_record(session, user, entity_type, entity_id)
-        if name is None:
-            await callback.answer("Record not found", show_alert=True)
+        action = parts[1]
+        entity_type = parts[2]
+        if action == "delete" and len(parts) == 4:
+            entity_id = parts[3]
+            with sessions() as session:
+                user = get_or_create_user(session, callback.from_user.id, settings.user_name)
+                name = delete_planning_record(session, user, entity_type, entity_id)
+            if name is None:
+                await callback.answer("Record not found", show_alert=True)
+                return
+            try:
+                await callback.message.edit_text(
+                    f"🗑️ Deleted {entity_type}\n\n{name}", reply_markup=None
+                )
+            except Exception:
+                pass
+            await callback.answer(f"{entity_type.capitalize()} deleted")
+            return
+        if action not in {"view", "page"} or entity_type not in {
+            "place",
+            "idea",
+            "event",
+            "reminder",
+        }:
+            await callback.answer("Nothing changed")
             return
         try:
-            await callback.message.edit_text(
-                f"🗑️ Deleted {entity_type}\n\n{name}", reply_markup=None
-            )
-        except Exception:
-            pass
-        await callback.answer(f"{entity_type.capitalize()} deleted")
+            if action == "page" and len(parts) == 4:
+                page = int(parts[3])
+                with sessions() as session:
+                    user = get_or_create_user(session, callback.from_user.id, settings.user_name)
+                    records = list_planning_records(session, user, entity_type)
+                if not records:
+                    await callback.answer("No records found", show_alert=True)
+                    return
+                text, keyboard = planning_list_view(entity_type, records, page)
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer()
+                return
+            if action == "view" and len(parts) == 5:
+                entity_id = parts[3]
+                with sessions() as session:
+                    user = get_or_create_user(session, callback.from_user.id, settings.user_name)
+                    record = get_owned_planning_record(session, user, entity_type, entity_id)
+                if record is None or record.status in {"deleted", "cancelled"}:
+                    await callback.answer("Record not found", show_alert=True)
+                    return
+                text, keyboard = planning_card(entity_type, record)
+                labels = {
+                    "place": "place",
+                    "idea": "idea",
+                    "event": "event",
+                    "reminder": "reminder",
+                }
+                selection_context = (
+                    f"The user selected this saved {labels[entity_type]} for the next turn.\n{text}"
+                )
+                with sessions() as session:
+                    user = get_or_create_user(session, callback.from_user.id, settings.user_name)
+                    conversation = get_or_create_conversation(session, user)
+                    add_message(session, conversation, "user", selection_context)
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer()
+                return
+        except (TypeError, ValueError):
+            await callback.answer("Invalid planning selection", show_alert=True)
+            return
+        await callback.answer("Nothing changed")
 
     @router.message()
     async def chat(message: TelegramMessage) -> None:
@@ -1251,7 +1404,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     {
                         "answer": answer,
                         "tool_calls": model_client.last_tool_trace,
-                        "context_usage": retrieval_context_usage(results, answer),
+                        "context_usage": retrieval_context_usage(
+                            results, answer, model_client.last_tool_trace
+                        ),
                     },
                     ensure_ascii=False,
                 ),
@@ -1378,6 +1533,10 @@ async def run_bot(settings: Settings) -> None:
                 BotCommand(command="start", description="Start Wingman"),
                 BotCommand(command="newchat", description="Clear the current conversation"),
                 BotCommand(command="remember", description="Explicitly save a detail"),
+                BotCommand(command="places", description="List saved places"),
+                BotCommand(command="events", description="List saved events"),
+                BotCommand(command="ideas", description="List saved ideas"),
+                BotCommand(command="reminders", description="List reminders"),
             ]
         )
         await build_dispatcher(settings).start_polling(bot)
