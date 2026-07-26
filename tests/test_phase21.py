@@ -4,17 +4,15 @@ from types import SimpleNamespace
 
 from wingman.config import Settings
 from wingman.inbound import InboundAttachment, InboundMessage
-from wingman.model_client import ModelClient, explicit_retrieval_tool
+from wingman.model_client import ModelClient, mandatory_retrieval_tool
 
 
-def test_explicit_memory_request_selects_memory_search():
-    assert explicit_retrieval_tool([("user", "Please use my saved memories")]) == (
+def test_every_user_turn_selects_memory_search_first():
+    assert mandatory_retrieval_tool([("user", "Hello")]) == "search_memories"
+    assert mandatory_retrieval_tool([("user", "Please use my saved memories")]) == (
         "search_memories"
     )
-    assert explicit_retrieval_tool([("user", "What do you remember about Chloe?")]) == (
-        "search_memories"
-    )
-    assert explicit_retrieval_tool([("user", "Do not use my saved memories")]) is None
+    assert mandatory_retrieval_tool([("assistant", "Hello")]) is None
 
 
 def test_inbound_message_supports_multiple_temporary_attachments():
@@ -76,6 +74,7 @@ def test_model_request_allows_multiple_tool_calls():
     assert answer == "Done."
     assert len(executed) == 2
     assert calls[0]["parallel_tool_calls"] is True
+    assert calls[0]["tool_choice"] == {"type": "function", "name": "search_memories"}
 
 
 def test_explicit_memory_request_forces_first_search_then_returns_to_auto():

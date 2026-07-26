@@ -1,6 +1,12 @@
 # Implementation plan
 
-Wingman 5.2.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.3.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.3 completed
+
+- Made the first memory search mandatory before every model response when tools are available.
+- Kept all other tool selection automatic.
+- Allowed empty memory results to fall back to the recent conversation and general knowledge.
 
 ## Phase 5.2 completed
 
