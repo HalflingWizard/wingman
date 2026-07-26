@@ -462,3 +462,59 @@ Delivered
 - Multimodal inputs are bounded, traceable, and deleted after processing.
 - Cost totals identify reported versus estimated usage and can be reconciled to individual operations.
 - No autonomous development or runtime loop can bypass application validation, ownership checks, safety rules, or human review.
+
+## Version 4.x roadmap
+
+Each phase below is a release increment. Implementing Phase 4.1 produces version 4.1.0, implementing Phase 4.2 produces version 4.2.0, and so on. This roadmap preserves natural conversation, database verification, local privacy, and simple operation as acceptance requirements.
+
+### Phase 4.1
+
+Reliable owner commands and conversation reset
+
+- Add a concise `/newchat` command that closes the active conversation and starts a fresh one.
+- Preserve memories, planning records, usage records, and diagnostics when a chat is reset.
+- Add a natural `/remember` command path that classifies the supplied detail as a memory, place, event, idea, or reminder before saving it.
+- Verify every command write in the database before showing its Telegram card.
+- Add command help and visible command descriptions in Telegram.
+- Increase voice-message limits safely with configurable size and duration limits, timeout handling, and cleanup tests.
+
+### Phase 4.2
+
+Better memory retrieval and tool schema reliability
+
+- Separate lexical exact-term matching, normalized keyword matching, and semantic similarity in retrieval diagnostics.
+- Use a structured memory search query with keywords, a semantic sentence, optional entity hints, and status filters.
+- Improve stemming, synonym handling, phrase matching, and score explanations without returning every memory by default.
+- Establish documented allowed values for memory types, planning types, statuses, note types, and action types.
+- Improve tool descriptions and schemas so the model uses the exact allowed values on its first attempt.
+- Add retrieval evaluation cases for related terms such as jewelry, accessories, earrings, and silver.
+
+### Phase 4.3
+
+Operational logs and failure history
+
+- Replace the current tool-call-only logs page with a live last-100-lines runtime output view.
+- Add a durable error history with timestamp, source, operation, user-safe message, exception type, file, line, traceback, and related agent or message IDs.
+- Record received messages that time out or receive no response.
+- Record processing failures without storing raw credentials or unnecessary media bytes.
+- Add filtering by date, error type, operation, and severity.
+- Keep live output bounded and make detailed errors copyable and scrollable.
+
+### Phase 4.4
+
+Visible processing status stickers
+
+- Add owner-configured Telegram sticker IDs for each transient processing state.
+- Use short-lived states for message received, downloading media, processing images, processing video, transcribing audio, reading a document, searching memories, saving records, calling the model, and handling an error.
+- Delete the previous status sticker before sending the next one and clean up after completion or failure.
+- Keep typing status active only while model response work is running.
+- Add configuration validation and mocked lifecycle tests for status ordering and cleanup.
+
+### Phase 4.5
+
+Release hardening and observability review
+
+- Verify command flows, reset behavior, retrieval quality, schema validation, runtime logs, error history, status stickers, media cleanup, and dashboard freshness together.
+- Add end-to-end mocked tests for multi-action remember requests and partial failures.
+- Update all current-version documentation and create `RELEASE_NOTES_v4.5.0.md` only when that release is complete.
+- Remove superseded release-note files after the current release notes are published.

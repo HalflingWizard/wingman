@@ -411,8 +411,8 @@ def create_saved_idea(
 def list_saved_ideas(
     session: Session, user: User, include_deleted: bool = False
 ) -> list[SavedIdea]:
-    query = select(SavedIdea).where(SavedIdea.user_id == user.id).order_by(
-        SavedIdea.updated_at.desc()
+    query = (
+        select(SavedIdea).where(SavedIdea.user_id == user.id).order_by(SavedIdea.updated_at.desc())
     )
     if not include_deleted:
         query = query.where(SavedIdea.status != "deleted")

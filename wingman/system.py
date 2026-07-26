@@ -91,8 +91,11 @@ def ensure_media_tools(settings: Settings, logs: list[str]) -> None:
     tool_paths = {
         name: shutil.which(name)
         or next(
-            (candidate for candidate in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
-             if Path(candidate, name).is_file()),
+            (
+                candidate
+                for candidate in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+                if Path(candidate, name).is_file()
+            ),
             None,
         )
         for name in ("ffmpeg", "ffprobe")

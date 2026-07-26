@@ -1023,7 +1023,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/planning/events", response_class=HTMLResponse)
     def add_event(
         request: Request,
-        title: str = Form(...), start_at: str = Form(...), description: str = Form("")
+        title: str = Form(...),
+        start_at: str = Form(...),
+        description: str = Form(""),
     ) -> str:
         with session_factory(active_settings)() as session:
             user = web_user(session)
@@ -1031,7 +1033,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return planning(request)
 
     @app.post("/planning/reminders", response_class=HTMLResponse)
-    def add_reminder(request: Request, title: str = Form(...), scheduled_at: str = Form(...)) -> str:
+    def add_reminder(
+        request: Request, title: str = Form(...), scheduled_at: str = Form(...)
+    ) -> str:
         with session_factory(active_settings)() as session:
             user = web_user(session)
             create_reminder(session, user, title, parse_datetime(scheduled_at))
@@ -1279,7 +1283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cards.append(
                     "<article class='record'>"
                     f"<h2>Conversation {conversation.id}</h2>"
-            f"<h3 class='section-title'><i class='fa-solid fa-scroll'></i> Summary</h3><div class='conversation-summary'>{escape(summary.summary_text if summary else 'No rolling summary yet.')}</div>"
+                    f"<h3 class='section-title'><i class='fa-solid fa-scroll'></i> Summary</h3><div class='conversation-summary'>{escape(summary.summary_text if summary else 'No rolling summary yet.')}</div>"
                     f"<h3 class='section-title'><i class='fa-solid fa-comments'></i> Recent messages</h3><div class='conversation-list'>{messages}</div></article>"
                 )
         body = (
