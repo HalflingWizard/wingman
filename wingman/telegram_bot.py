@@ -581,6 +581,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             result = output.get("result", {})
             if not isinstance(result, dict):
                 continue
+            if result.get("verified") is not True:
+                continue
             memory_id = result.get("memory_id")
             if not isinstance(memory_id, str) or memory_id in published_memory_ids:
                 continue
@@ -632,6 +634,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 continue
             result = output.get("result", {})
             if not isinstance(result, dict):
+                continue
+            if result.get("verified") is not True:
                 continue
             entity_type, id_key = tool_info
             entity_id = result.get(id_key)

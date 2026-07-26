@@ -51,3 +51,33 @@ def test_system_page_exposes_safe_database_scope_diagnostics(tmp_path):
     assert "Database diagnostics" in response.text
     assert str((tmp_path / "test.db").resolve()) in response.text
     assert "configured_owner_id" in response.text
+
+
+def test_planning_tool_results_are_database_verified(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'test.db'}",
+        telegram_owner_id=42,
+    )
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        user = User(telegram_user_id=42, name="Owner")
+        session.add(user)
+        session.commit()
+        executor = MemoryToolExecutor(session, user)
+        place = executor.execute(
+            "create_place",
+            {"name": "Soyu", "address": "", "city": "", "description": "Cafe"},
+        )
+        event = executor.execute(
+            "create_event",
+            {
+                "title": "Coffee date",
+                "start_at": "2030-01-02T19:00:00",
+                "event_type": "date",
+                "timezone": "UTC",
+                "description": "Meet at Soyu",
+                "place_id": place["place_id"],
+            },
+        )
+    assert place["verified"] is True
+    assert event["verified"] is True

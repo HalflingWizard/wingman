@@ -31,6 +31,7 @@ from wingman.services import (
     get_open_action_group,
     get_open_pending_state,
     get_owned_memory,
+    get_owned_planning_record,
     list_events,
     list_memory_notes,
     list_places,
@@ -312,6 +313,10 @@ class MemoryToolExecutor:
                         "duplicate": True,
                         "place_id": existing_place.id,
                         "name": existing_place.name,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "place", existing_place.id
+                        )
+                        is not None,
                     }
                 else:
                     place = create_place(
@@ -325,6 +330,10 @@ class MemoryToolExecutor:
                         "name": place.name,
                         "address": place.address,
                         "city": place.city,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "place", place.id
+                        )
+                        is not None,
                     }
                 record_tool_execution(
                     self.session,
@@ -344,6 +353,10 @@ class MemoryToolExecutor:
                         "duplicate": True,
                         "idea_id": existing_idea.id,
                         "title": existing_idea.title,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "idea", existing_idea.id
+                        )
+                        is not None,
                     }
                 else:
                     idea = create_saved_idea(
@@ -351,7 +364,15 @@ class MemoryToolExecutor:
                         self.user,
                         **idea_data.model_dump(exclude={"action_id"}),
                     )
-                    output = {"created": True, "idea_id": idea.id, "title": idea.title}
+                    output = {
+                        "created": True,
+                        "idea_id": idea.id,
+                        "title": idea.title,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "idea", idea.id
+                        )
+                        is not None,
+                    }
                 record_tool_execution(
                     self.session,
                     self.user,
@@ -371,6 +392,10 @@ class MemoryToolExecutor:
                         "duplicate": True,
                         "event_id": existing_event.id,
                         "title": existing_event.title,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "event", existing_event.id
+                        )
+                        is not None,
                     }
                 else:
                     event = create_event(
@@ -388,6 +413,10 @@ class MemoryToolExecutor:
                         "event_id": event.id,
                         "title": event.title,
                         "start_at": event.start_at.isoformat(),
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "event", event.id
+                        )
+                        is not None,
                     }
                 record_tool_execution(
                     self.session,
@@ -410,6 +439,10 @@ class MemoryToolExecutor:
                         "duplicate": True,
                         "reminder_id": existing_reminder.id,
                         "title": existing_reminder.title,
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "reminder", existing_reminder.id
+                        )
+                        is not None,
                     }
                 else:
                     reminder = create_reminder(
@@ -425,6 +458,10 @@ class MemoryToolExecutor:
                         "reminder_id": reminder.id,
                         "title": reminder.title,
                         "scheduled_at": reminder.scheduled_at.isoformat(),
+                        "verified": get_owned_planning_record(
+                            self.session, self.user, "reminder", reminder.id
+                        )
+                        is not None,
                     }
                 record_tool_execution(
                     self.session,
@@ -553,7 +590,11 @@ class MemoryToolExecutor:
                 memory = note_memory
             else:
                 raise ValueError("Unknown tool")
-            output = {"memory_id": memory.id, "status": memory.status}
+            output = {
+                "memory_id": memory.id,
+                "status": memory.status,
+                "verified": get_owned_memory(self.session, self.user, memory.id) is not None,
+            }
             record_tool_execution(
                 self.session,
                 self.user,
