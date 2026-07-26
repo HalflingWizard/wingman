@@ -9,8 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from wingman.models import Conversation, Place, User
-from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
+from wingman.models import Conversation, User
 from wingman.saved_context import (
     SAVED_CATEGORIES,
     SavedCategory,
@@ -41,11 +40,6 @@ from wingman.services import (
     get_open_pending_state,
     get_owned_memory,
     get_owned_planning_record,
-    list_events,
-    list_memory_notes,
-    list_places,
-    list_reminders,
-    list_saved_ideas,
     mark_action_item,
     record_tool_execution,
     register_action_items,
@@ -55,7 +49,7 @@ from wingman.services import (
     update_reminder,
     update_saved_idea,
 )
-from wingman.time_ranges import resolve_date_range, within_range
+from wingman.time_ranges import resolve_date_range
 
 
 class CreateMemoryInput(BaseModel):
@@ -83,15 +77,6 @@ class AddMemoryNoteInput(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
 
 
-class SearchMemoriesInput(BaseModel):
-    query: str = Field(min_length=1, max_length=1000)
-    top_k: int = Field(default=5, ge=1, le=8)
-    date_from: str | None = Field(default=None, max_length=80)
-    date_to: str | None = Field(default=None, max_length=80)
-    memory_types: list[str] = Field(default_factory=list, max_length=8)
-    person_name: str | None = Field(default=None, max_length=200)
-
-
 class ProposeMemoryInput(BaseModel):
     action_id: str | None = None
     statement: str = Field(min_length=1, max_length=4000)
@@ -99,17 +84,6 @@ class ProposeMemoryInput(BaseModel):
     status: str = Field(default="inferred", pattern="^(observed|inferred|uncertain)$")
     confidence: float = Field(default=0.7, ge=0, le=1)
     importance: int = Field(default=3, ge=1, le=5)
-
-
-class SearchPlanningInput(BaseModel):
-    query: str = Field(min_length=1, max_length=500)
-    top_k: int = Field(default=5, ge=1, le=10)
-    item_types: list[Literal["place", "idea", "event", "reminder"]] = Field(
-        default_factory=list, max_length=4
-    )
-    city: str | None = Field(default=None, max_length=120)
-    date_from: str | None = Field(default=None, max_length=80)
-    date_to: str | None = Field(default=None, max_length=80)
 
 
 class SearchSavedContextInput(BaseModel):
@@ -334,181 +308,6 @@ class MemoryToolExecutor:
                     "searched_categories": saved_categories,
                     "mode": saved_search_data.mode,
                 }
-                record_tool_execution(
-                    self.session,
-                    self.user,
-                    name,
-                    arguments,
-                    output_data=output,
-                    agent_run_id=self.agent_run_id,
-                )
-                return output
-            if name == "search_memories":
-                query_vector = arguments.pop("_query_embedding", None)
-                if not isinstance(query_vector, list):
-                    query_vector = None
-                search_data = SearchMemoriesInput.model_validate(arguments)
-                search_query = search_data.query
-                if search_data.person_name:
-                    search_query = f"{search_data.person_name} {search_query}"
-                date_from, date_to = resolve_date_range(
-                    search_data.query,
-                    self.timezone,
-                    search_data.date_from,
-                    search_data.date_to,
-                )
-                matches = retrieve_memories(
-                    self.session,
-                    self.user,
-                    search_query,
-                    limit=search_data.top_k,
-                    query_vector=query_vector,
-                    date_from=date_from,
-                    date_to=date_to,
-                )
-                if self.conversation is not None:
-                    log_retrieval(
-                        self.session,
-                        self.user,
-                        self.conversation,
-                        retrieval_query(
-                            search_query,
-                            self.user,
-                            {
-                                "date_from": date_from.isoformat() if date_from else None,
-                                "date_to": date_to.isoformat() if date_to else None,
-                                "memory_types": search_data.memory_types,
-                                "person_name": search_data.person_name,
-                            },
-                        ),
-                        matches,
-                    )
-                output = {
-                    "memories": [
-                        {
-                            "memory_id": result.memory.id,
-                            "statement": result.memory.statement,
-                            "status": result.memory.status,
-                            "confidence": result.memory.confidence,
-                            "importance": result.memory.importance,
-                            "notes": [
-                                {
-                                    "note_id": note.id,
-                                    "text": note.text,
-                                    "note_type": note.note_type,
-                                    "source_message_id": note.source_message_id,
-                                }
-                                for note in list_memory_notes(
-                                    self.session, self.user, result.memory.id
-                                )
-                            ],
-                        }
-                        for result in matches
-                        if not search_data.memory_types
-                        or result.memory.type in search_data.memory_types
-                    ]
-                }
-                record_tool_execution(
-                    self.session,
-                    self.user,
-                    name,
-                    arguments,
-                    output_data=output,
-                    agent_run_id=self.agent_run_id,
-                )
-                return output
-            if name == "search_planning":
-                planning_data = SearchPlanningInput.model_validate(arguments)
-                query = planning_data.query.casefold()
-                date_from, date_to = resolve_date_range(
-                    planning_data.query,
-                    self.timezone,
-                    planning_data.date_from,
-                    planning_data.date_to,
-                )
-                if date_from is not None and any(
-                    phrase in query
-                    for phrase in ("last week", "yesterday", "this month", "last month")
-                ):
-                    query = "" if query.startswith(("what did", "what plans", "which")) else query
-                selected_types = set(planning_data.item_types)
-                records: list[dict[str, Any]] = []
-                for place in list_places(self.session, self.user):
-                    if selected_types and "place" not in selected_types:
-                        continue
-                    if (
-                        planning_data.city
-                        and planning_data.city.casefold() not in place.city.casefold()
-                    ):
-                        continue
-                    if not within_range(place.created_at, date_from, date_to):
-                        continue
-                    text = (
-                        f"{place.name} {place.address} {place.city} {place.description}".casefold()
-                    )
-                    if query in text:
-                        records.append(
-                            {
-                                "kind": "place",
-                                "id": place.id,
-                                "name": place.name,
-                                "address": place.address,
-                                "city": place.city,
-                                "description": place.description,
-                            }
-                        )
-                for idea in list_saved_ideas(self.session, self.user):
-                    if selected_types and "idea" not in selected_types:
-                        continue
-                    if not within_range(idea.created_at, date_from, date_to):
-                        continue
-                    if query in f"{idea.title} {idea.reason}".casefold():
-                        records.append(
-                            {
-                                "kind": "idea",
-                                "id": idea.id,
-                                "title": idea.title,
-                                "reason": idea.reason,
-                            }
-                        )
-                for event in list_events(self.session, self.user):
-                    if selected_types and "event" not in selected_types:
-                        continue
-                    if planning_data.city:
-                        linked_place = get_owned_planning_record(
-                            self.session, self.user, "place", event.place_id or ""
-                        )
-                        if not isinstance(linked_place, Place) or (
-                            planning_data.city.casefold() not in linked_place.city.casefold()
-                        ):
-                            continue
-                    if not within_range(event.start_at, date_from, date_to):
-                        continue
-                    if query in f"{event.title} {event.description}".casefold():
-                        records.append(
-                            {
-                                "kind": "event",
-                                "id": event.id,
-                                "title": event.title,
-                                "start_at": event.start_at.isoformat(),
-                                "description": event.description,
-                            }
-                        )
-                for reminder in list_reminders(self.session, self.user):
-                    if selected_types and "reminder" not in selected_types:
-                        continue
-                    if not within_range(reminder.scheduled_at, date_from, date_to):
-                        continue
-                    if query in reminder.title.casefold():
-                        records.append(
-                            {
-                                "kind": "reminder",
-                                "id": reminder.id,
-                                "title": reminder.title,
-                                "scheduled_at": reminder.scheduled_at.isoformat(),
-                            }
-                        )
-                output = {"records": records[: planning_data.top_k]}
                 record_tool_execution(
                     self.session,
                     self.user,

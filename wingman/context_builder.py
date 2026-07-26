@@ -37,6 +37,7 @@ def build_context(
     retrieved: list[RetrievalResult],
     timezone: str,
     primary_person_name: str = "",
+    location: str = "",
     summary: ConversationSummary | None = None,
     pending_state: PendingState | None = None,
     places: list[Place] | None = None,
@@ -87,6 +88,7 @@ def build_context(
         "results naturally and never mention retrieval mechanics in the reply. "
         f"The user's name is {user.name or 'the user'}. "
         f"The primary person's name is {primary_person_name or 'not configured'}. "
+        f"The owner's current city or location is {location or 'not configured'}. "
         f"The user's timezone is {timezone}. The current local date and time is {current_time}."
     )
     memories = retrieved[:max_memories]

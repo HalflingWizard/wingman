@@ -1327,6 +1327,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 results,
                 settings.timezone,
                 primary_person_name=settings.primary_person_name,
+                location=settings.location,
                 summary=summary,
                 pending_state=pending_state,
                 action_ledger=current_action_ledger,

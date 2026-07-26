@@ -231,7 +231,7 @@ def retrieval_context_usage(
     ]
     if tool_trace:
         for trace in tool_trace:
-            if trace.get("name") not in {"search_memories", "search_saved_context"}:
+            if trace.get("name") != "search_saved_context":
                 continue
             output = trace.get("output")
             if not isinstance(output, dict) or not output.get("ok"):
@@ -239,11 +239,7 @@ def retrieval_context_usage(
             result = output.get("result")
             if not isinstance(result, dict):
                 continue
-            records = (
-                result.get("memories")
-                if trace.get("name") == "search_memories"
-                else result.get("records")
-            )
+            records = result.get("records")
             if not isinstance(records, list):
                 continue
             for record in records:

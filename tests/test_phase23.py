@@ -75,7 +75,7 @@ def test_planning_tools_create_partial_place_and_scheduled_records(tmp_path):
         assert duplicate["duplicate"] is True
 
 
-def test_search_planning_returns_owned_records(tmp_path):
+def test_unified_search_returns_owned_records(tmp_path):
     settings = Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
     initialize_database(settings)
     with session_factory(settings)() as session:
@@ -94,5 +94,16 @@ def test_search_planning_returns_owned_records(tmp_path):
                 "atmosphere_tags": "romantic",
             },
         )
-        result = executor.execute("search_planning", {"query": "romantic", "top_k": 5})
-        assert result["records"][0]["name"] == "Casa Verde"
+        result = executor.execute(
+            "search_saved_context",
+            {
+                "query": "romantic restaurant",
+                "categories": ["place"],
+                "top_k": 5,
+                "mode": "search",
+                "city": None,
+                "date_from": None,
+                "date_to": None,
+            },
+        )
+        assert result["records"][0]["fields"]["name"] == "Casa Verde"

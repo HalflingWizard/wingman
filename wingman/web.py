@@ -604,6 +604,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         read_only = (
             f"<div class='settings-grid'><label>Owner name<input value='{escape(active_settings.user_name, quote=True)}' disabled></label>"
             f"<label>Primary person name<input value='{escape(active_settings.primary_person_name, quote=True)}' disabled></label>"
+            f"<label>City or location<input value='{escape(active_settings.location, quote=True)}' disabled></label>"
             f"<label>Timezone<input value='{escape(active_settings.timezone, quote=True)}' disabled></label>"
             f"<label>Current local date and time<input value='{escape(current_time, quote=True)}' disabled></label>"
             f"<label>Active model<input value='{escape(active_settings.openai_main_model, quote=True)}' disabled></label></div>"
@@ -656,6 +657,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 [],
                 active_settings.timezone,
                 primary_person_name=active_settings.primary_person_name,
+                location=active_settings.location,
                 prompt_text=load_prompt(active_settings),
                 max_messages=active_settings.recent_message_limit,
                 token_budget=active_settings.context_token_budget,

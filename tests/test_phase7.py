@@ -13,7 +13,7 @@ def phase7_settings(tmp_path):
     return Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", telegram_owner_id=42)
 
 
-def test_search_memory_tool_returns_owned_text_and_notes(tmp_path):
+def test_unified_search_tool_returns_owned_text_and_notes(tmp_path):
     settings = phase7_settings(tmp_path)
     initialize_database(settings)
     with session_factory(settings)() as session:
@@ -24,10 +24,19 @@ def test_search_memory_tool_returns_owned_text_and_notes(tmp_path):
         session.add(memory)
         session.commit()
         result = MemoryToolExecutor(session, user).execute(
-            "search_memories", {"query": "what jewelry does she like"}
+            "search_saved_context",
+            {
+                "query": "what jewelry does she like",
+                "categories": ["memory"],
+                "top_k": 5,
+                "mode": "search",
+                "city": None,
+                "date_from": None,
+                "date_to": None,
+            },
         )
-    assert result["memories"][0]["memory_id"] == memory.id
-    assert result["memories"][0]["statement"] == "Penelope likes silver accessories"
+    assert result["records"][0]["record_id"] == memory.id
+    assert result["records"][0]["content"] == "Penelope likes silver accessories"
 
 
 def test_model_client_runs_application_controlled_tool_loop():

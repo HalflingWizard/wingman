@@ -56,11 +56,20 @@ def test_memory_tool_passes_query_embedding_to_hybrid_retrieval(tmp_path):
         session.commit()
 
         result = MemoryToolExecutor(session, user).execute(
-            "search_memories",
-            {"query": "pizza place", "top_k": 5, "_query_embedding": [1.0, 0.0]},
+            "search_saved_context",
+            {
+                "query": "pizza place",
+                "categories": ["memory"],
+                "top_k": 5,
+                "mode": "search",
+                "city": None,
+                "date_from": None,
+                "date_to": None,
+                "_query_embedding": [1.0, 0.0],
+            },
         )
 
-        assert result["memories"][0]["memory_id"] == memory.id
+        assert result["records"][0]["record_id"] == memory.id
 
 
 def test_model_client_requests_query_embedding_without_forcing_tool_choice():

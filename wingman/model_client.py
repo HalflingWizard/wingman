@@ -160,54 +160,6 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
-        "name": "search_memories",
-        "description": (
-            "Search the owner's saved memories and notes when the current request needs a "
-            "past fact, preference, relationship detail, or duplicate check. Use a focused "
-            "natural-language query containing the person and the relevant subject. Do not "
-            "call this for greetings, ordinary small talk, transcription requests, or "
-            "unrelated current tasks. Search before creating or changing a memory. Results "
-            "contain the saved statement, status, confidence, importance, and notes. Use "
-            "date_from and date_to for a time period. Resolve relative periods using the "
-            "owner timezone and send ISO 8601 timestamps."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1000,
-                    "description": (
-                        "Focused search phrase such as 'Chloe silver accessories' or "
-                        "'previous discussion about Soyu'. Include names and subject terms."
-                    ),
-                },
-                "top_k": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 8,
-                    "description": "Maximum number of relevant matches to return.",
-                },
-                "date_from": {
-                    "type": ["string", "null"],
-                    "description": "Inclusive ISO 8601 start.",
-                },
-                "date_to": {"type": ["string", "null"], "description": "Exclusive ISO 8601 end."},
-                "memory_types": {
-                    "type": "array",
-                    "maxItems": 8,
-                    "items": {"type": "string", "enum": MEMORY_TYPE_VALUES},
-                },
-                "person_name": {"type": ["string", "null"]},
-            },
-            "required": ["query", "top_k", "date_from", "date_to", "memory_types", "person_name"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
-    {
-        "type": "function",
         "name": "propose_memory",
         "description": (
             "Ask the owner whether to save an uncertain personal observation or preference. "
@@ -375,47 +327,6 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
 ]
 
 PLANNING_TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "name": "search_planning",
-        "description": (
-            "Search the owner's saved places, ideas, events, and reminders when the current "
-            "request refers to a previously saved plan or when checking for a duplicate before "
-            "creating one. Do not call this for unrelated conversation. Use the place name, "
-            "idea title, event title, or reminder subject in the query."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500,
-                    "description": "Focused phrase naming the saved plan or subject to find.",
-                },
-                "top_k": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10,
-                    "description": "Maximum number of matching planning records to return.",
-                },
-                "item_types": {
-                    "type": "array",
-                    "maxItems": 4,
-                    "items": {"type": "string", "enum": ["place", "idea", "event", "reminder"]},
-                },
-                "city": {"type": ["string", "null"]},
-                "date_from": {
-                    "type": ["string", "null"],
-                    "description": "Inclusive ISO 8601 start.",
-                },
-                "date_to": {"type": ["string", "null"], "description": "Exclusive ISO 8601 end."},
-            },
-            "required": ["query", "top_k", "item_types", "city", "date_from", "date_to"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
     {
         "type": "function",
         "name": "create_place",
@@ -943,7 +854,7 @@ class ModelClient:
                                     level="warning",
                                     operation="saved context retrieval",
                                 )
-                        if call.name in {"search_memories", "search_saved_context"} and (
+                        if call.name == "search_saved_context" and (
                             query_embedding_provider or embedding_batch_provider
                         ):
                             query = arguments.get("query")

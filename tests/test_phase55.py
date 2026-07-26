@@ -17,6 +17,7 @@ def test_context_sections_are_persisted_and_used_by_preview(tmp_path):
         user_name="Owner",
         primary_person_name="Person",
         timezone="America/New_York",
+        location="Philadelphia, PA, USA",
     )
     initialize_database(settings)
     client = TestClient(create_app(settings))
@@ -44,6 +45,7 @@ def test_context_sections_are_persisted_and_used_by_preview(tmp_path):
     assert "Use a calm and direct tone." in preview.text
     assert "Owner" in preview.text
     assert "America/New_York" in preview.text
+    assert "Philadelphia, PA, USA" in preview.text
     assert "search_saved_context" in preview.text
 
 

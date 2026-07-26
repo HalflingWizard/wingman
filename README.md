@@ -4,7 +4,7 @@
 
 Wingman is a private Telegram relationship assistant for one owner. It helps you remember useful details, understand ongoing conversations, plan thoughtful dates, and review how an AI response was produced.
 
-The current release is Wingman 5.10.0.
+The current release is Wingman 6.0.0.
 
 It is designed to feel like a natural conversation with a thoughtful friend. Memory tools, retrieval, prompts, and diagnostics work behind the scenes. Telegram stays focused on the conversation, while the local dashboard gives you control and transparency.
 
@@ -14,11 +14,11 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 - Keep memory notes with supporting context and source messages
 - Retrieve relevant memories, places, ideas, events, and reminders using one semantic search
 - Keep recent conversation history and rolling summaries
-- Save useful durable memories without proposal loops
+- Save clear, useful, durable memories without proposal loops
 - Plan places, ideas, events, and one-time reminders
 - Search across saved categories automatically when a recommendation, plan, or recollection can benefit
 - Send due reminders through Telegram
-- Use the owner's name, primary person's name, timezone, and current time naturally
+- Use the owner's name, primary person's name, city or location, timezone, and current time naturally
 - Search for a city in Settings and select its timezone from geocoding results
 - Keep facts, observations, and inferences separate
 - Accept Telegram voice messages, transcribe them, and process them like text
@@ -37,7 +37,7 @@ It is designed to feel like a natural conversation with a thoughtful friend. Mem
 
 Wingman is built to keep ordinary conversation ordinary. It does not save every greeting, suggestion, or temporary plan. It proposes uncertain personal observations before saving them and shows saved memories as visible Telegram cards with owner controls.
 
-The assistant can use saved context naturally, for example by connecting a known preference to a gift idea. It does not mention database IDs, retrieval scores, internal tools, or prompt mechanics in normal replies.
+The assistant can use saved context naturally, for example by connecting a known preference to a gift idea. It searches one shared saved-context index across all record types instead of putting every saved record into each prompt. It does not mention database IDs, retrieval scores, internal tools, or prompt mechanics in normal replies.
 
 ## Local dashboard
 
@@ -112,6 +112,7 @@ WINGMAN_ATTACHMENT_RETENTION_SECONDS=600
 WINGMAN_USER_NAME=
 WINGMAN_PRIMARY_PERSON_NAME=
 WINGMAN_TIMEZONE=UTC
+WINGMAN_LOCATION=
 WINGMAN_PROMPT_FILE=prompts/wingman.md
 ```
 
@@ -160,7 +161,7 @@ The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLit
 - [Implementation history](IMPLEMENTATION_PLAN.md)
 - [Controlled development loop](DEVELOPMENT_LOOP.md)
 - [Development task ledger](DEVELOPMENT_TASKS.json)
-- [Version 5.10.0 release notes](RELEASE_NOTES_v5.10.0.md)
+- [Consolidated 5.1 to 5.10 release notes](RELEASE_NOTES_v6.0.0.md)
 
 ## License
 

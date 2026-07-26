@@ -1,6 +1,13 @@
 # Implementation plan
 
-Wingman 5.10.0 is the current development release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 6.0.0 is the current release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Version 6 final context update
+
+- Added `WINGMAN_LOCATION` as a separate runtime setting from the timezone.
+- Exposed the city or location in Settings and the read-only Personal context panel.
+- Added the configured location to the static runtime context used by agent requests.
+- Kept timezone responsible for date and time calculations only.
 
 ## Phase 5.10 completed
 
@@ -623,7 +630,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.10.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 6.0.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 
@@ -680,9 +687,9 @@ Simplified tools and reliable orchestration
 
 Status complete
 
-- Keep `search_memories`, `create_memory`, and `update_memory` as the memory tools.
+- The historical memory-only search tool was superseded by the unified `search_saved_context` tool.
 - Remove proposal, confirmation, note-only, and action-registration tools from the active tool set.
-- Keep `search_planning`, `create_place`, `create_saved_idea`, `create_event`, and `create_reminder`.
+- Use `search_saved_context` for places, ideas, events, and reminders, together with `create_place`, `create_saved_idea`, `create_event`, and `create_reminder`.
 - Add one validated `update_planning_item` tool for places, ideas, events, and reminders.
 - Keep deletion under user Telegram cards and dashboard controls.
 - Update schemas with clear allowed values, optional fields, ownership rules, and date requirements.
