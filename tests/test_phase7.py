@@ -88,4 +88,8 @@ def test_model_client_runs_application_controlled_tool_loop():
     assert client.last_request_snapshot["tools"][0]["parameters"]["required"] == [
         "query",
         "top_k",
+        "date_from",
+        "date_to",
+        "memory_types",
+        "person_name",
     ]

@@ -1,6 +1,6 @@
 # Architecture
 
-Wingman 5.6.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
+Wingman 5.7.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
 The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
@@ -12,7 +12,7 @@ The application is designed for one trusted owner on one machine. It favors clea
 4. Text is normalized directly, while voice audio is downloaded into memory and transcribed.
 5. The conversation, summary, pending state, and no preloaded memories are loaded.
 6. The context builder creates separate static instructions, dynamic context, and recent message history.
-7. The OpenAI Responses API receives the request and may request multiple validated memory or planning actions.
+7. The OpenAI Responses API receives the request and may request multiple validated memory or planning actions. Time filters and Telegram reply or card context are included when relevant.
 8. The application validates and executes the simplified active tool set, prevents repeated writes within the turn, records results, and continues the bounded tool loop.
 9. The assistant response is stored and sent to Telegram.
 

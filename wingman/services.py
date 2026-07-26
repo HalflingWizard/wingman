@@ -1141,6 +1141,81 @@ def save_telegram_planning_card(
     return card
 
 
+def get_telegram_card_context(
+    session: Session, user: User, chat_id: int, message_id: int
+) -> dict[str, Any] | None:
+    """Return structured context for an owned Telegram memory or planning card."""
+    memory_card = session.scalar(
+        select(TelegramCard).where(
+            TelegramCard.telegram_chat_id == chat_id,
+            TelegramCard.telegram_message_id == message_id,
+        )
+    )
+    if memory_card is not None:
+        memory = get_owned_memory(session, user, memory_card.memory_id)
+        if memory is None:
+            return None
+        return {
+            "card_type": "memory",
+            "record_id": memory.id,
+            "statement": memory.statement,
+            "status": memory.status,
+            "notes": [note.text for note in list_memory_notes(session, user, memory.id)],
+        }
+    planning_card = session.scalar(
+        select(TelegramPlanningCard).where(
+            TelegramPlanningCard.user_id == user.id,
+            TelegramPlanningCard.telegram_chat_id == chat_id,
+            TelegramPlanningCard.telegram_message_id == message_id,
+        )
+    )
+    if planning_card is None:
+        return None
+    record = get_owned_planning_record(
+        session, user, planning_card.entity_type, planning_card.entity_id
+    )
+    if record is None:
+        return None
+    context: dict[str, Any] = {
+        "card_type": planning_card.entity_type,
+        "record_id": record.id,
+    }
+    if isinstance(record, Place):
+        context.update(
+            {
+                "name": record.name,
+                "address": record.address,
+                "city": record.city,
+                "description": record.description,
+                "place_type": record.place_type,
+            }
+        )
+    elif isinstance(record, SavedIdea):
+        context.update(
+            {"title": record.title, "reason": record.reason, "place_id": record.place_id}
+        )
+    elif isinstance(record, Event):
+        context.update(
+            {
+                "title": record.title,
+                "start_at": record.start_at.isoformat(),
+                "event_type": record.event_type,
+                "description": record.description,
+                "place_id": record.place_id,
+            }
+        )
+    else:
+        context.update(
+            {
+                "title": record.title,
+                "scheduled_at": record.scheduled_at.isoformat(),
+                "timezone": record.timezone,
+                "event_id": record.event_id,
+            }
+        )
+    return context
+
+
 def delete_planning_record(
     session: Session, user: User, entity_type: str, entity_id: str
 ) -> str | None:

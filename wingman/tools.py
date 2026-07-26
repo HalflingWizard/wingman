@@ -9,7 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from wingman.models import Conversation, User
+from wingman.models import Conversation, Place, User
 from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
 from wingman.services import (
     action_ledger,
@@ -46,6 +46,7 @@ from wingman.services import (
     update_reminder,
     update_saved_idea,
 )
+from wingman.time_ranges import resolve_date_range, within_range
 
 
 class CreateMemoryInput(BaseModel):
@@ -76,6 +77,10 @@ class AddMemoryNoteInput(BaseModel):
 class SearchMemoriesInput(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     top_k: int = Field(default=5, ge=1, le=8)
+    date_from: str | None = Field(default=None, max_length=80)
+    date_to: str | None = Field(default=None, max_length=80)
+    memory_types: list[str] = Field(default_factory=list, max_length=8)
+    person_name: str | None = Field(default=None, max_length=200)
 
 
 class ProposeMemoryInput(BaseModel):
@@ -90,6 +95,12 @@ class ProposeMemoryInput(BaseModel):
 class SearchPlanningInput(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     top_k: int = Field(default=5, ge=1, le=10)
+    item_types: list[Literal["place", "idea", "event", "reminder"]] = Field(
+        default_factory=list, max_length=4
+    )
+    city: str | None = Field(default=None, max_length=120)
+    date_from: str | None = Field(default=None, max_length=80)
+    date_to: str | None = Field(default=None, max_length=80)
 
 
 class UpdatePlanningItemInput(BaseModel):
@@ -141,12 +152,14 @@ class MemoryToolExecutor:
         agent_run_id: str | None = None,
         conversation: Conversation | None = None,
         source_message_id: str | None = None,
+        timezone: str = "UTC",
     ) -> None:
         self.session = session
         self.user = user
         self.agent_run_id = agent_run_id
         self.conversation = conversation
         self.source_message_id = source_message_id
+        self.timezone = timezone
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -222,19 +235,39 @@ class MemoryToolExecutor:
                 if not isinstance(query_vector, list):
                     query_vector = None
                 search_data = SearchMemoriesInput.model_validate(arguments)
+                search_query = search_data.query
+                if search_data.person_name:
+                    search_query = f"{search_data.person_name} {search_query}"
+                date_from, date_to = resolve_date_range(
+                    search_data.query,
+                    self.timezone,
+                    search_data.date_from,
+                    search_data.date_to,
+                )
                 matches = retrieve_memories(
                     self.session,
                     self.user,
-                    search_data.query,
+                    search_query,
                     limit=search_data.top_k,
                     query_vector=query_vector,
+                    date_from=date_from,
+                    date_to=date_to,
                 )
                 if self.conversation is not None:
                     log_retrieval(
                         self.session,
                         self.user,
                         self.conversation,
-                        retrieval_query(search_data.query, self.user),
+                        retrieval_query(
+                            search_query,
+                            self.user,
+                            {
+                                "date_from": date_from.isoformat() if date_from else None,
+                                "date_to": date_to.isoformat() if date_to else None,
+                                "memory_types": search_data.memory_types,
+                                "person_name": search_data.person_name,
+                            },
+                        ),
                         matches,
                     )
                 output = {
@@ -258,6 +291,8 @@ class MemoryToolExecutor:
                             ],
                         }
                         for result in matches
+                        if not search_data.memory_types
+                        or result.memory.type in search_data.memory_types
                     ]
                 }
                 record_tool_execution(
@@ -272,8 +307,29 @@ class MemoryToolExecutor:
             if name == "search_planning":
                 planning_data = SearchPlanningInput.model_validate(arguments)
                 query = planning_data.query.casefold()
+                date_from, date_to = resolve_date_range(
+                    planning_data.query,
+                    self.timezone,
+                    planning_data.date_from,
+                    planning_data.date_to,
+                )
+                if date_from is not None and any(
+                    phrase in query
+                    for phrase in ("last week", "yesterday", "this month", "last month")
+                ):
+                    query = "" if query.startswith(("what did", "what plans", "which")) else query
+                selected_types = set(planning_data.item_types)
                 records: list[dict[str, Any]] = []
                 for place in list_places(self.session, self.user):
+                    if selected_types and "place" not in selected_types:
+                        continue
+                    if (
+                        planning_data.city
+                        and planning_data.city.casefold() not in place.city.casefold()
+                    ):
+                        continue
+                    if not within_range(place.created_at, date_from, date_to):
+                        continue
                     text = (
                         f"{place.name} {place.address} {place.city} {place.description}".casefold()
                     )
@@ -289,6 +345,10 @@ class MemoryToolExecutor:
                             }
                         )
                 for idea in list_saved_ideas(self.session, self.user):
+                    if selected_types and "idea" not in selected_types:
+                        continue
+                    if not within_range(idea.created_at, date_from, date_to):
+                        continue
                     if query in f"{idea.title} {idea.reason}".casefold():
                         records.append(
                             {
@@ -299,6 +359,18 @@ class MemoryToolExecutor:
                             }
                         )
                 for event in list_events(self.session, self.user):
+                    if selected_types and "event" not in selected_types:
+                        continue
+                    if planning_data.city:
+                        linked_place = get_owned_planning_record(
+                            self.session, self.user, "place", event.place_id or ""
+                        )
+                        if not isinstance(linked_place, Place) or (
+                            planning_data.city.casefold() not in linked_place.city.casefold()
+                        ):
+                            continue
+                    if not within_range(event.start_at, date_from, date_to):
+                        continue
                     if query in f"{event.title} {event.description}".casefold():
                         records.append(
                             {
@@ -310,6 +382,10 @@ class MemoryToolExecutor:
                             }
                         )
                 for reminder in list_reminders(self.session, self.user):
+                    if selected_types and "reminder" not in selected_types:
+                        continue
+                    if not within_range(reminder.scheduled_at, date_from, date_to):
+                        continue
                     if query in reminder.title.casefold():
                         records.append(
                             {

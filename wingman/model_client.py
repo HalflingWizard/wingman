@@ -33,6 +33,13 @@ def build_agent_instructions(
         "idea, event, or reminder saved. Search planning records before creating duplicates. "
         "Use update_planning_item when the owner corrects, annotates, reschedules, or adds "
         "feedback to an existing planning record. Do not use tools to delete records. "
+        "For time-based questions, resolve periods such as yesterday, last week, last June, "
+        "or this month in the configured timezone and provide explicit date_from and date_to "
+        "filters to the relevant search tool. Use search_planning for saved places, ideas, "
+        "events, and reminders rather than guessing from general knowledge. "
+        "When the user replies to a bot message or saved card, treat the supplied reply or card "
+        "context as the direct reference. Use the included internal record ID for an update and "
+        "do not expose that ID in the reply. "
         "Places may have unknown addresses or cities. Do not invent missing dates or times. "
         "When one message contains several distinct durable details, handle each safe detail and "
         "use multiple tool calls when appropriate. Keep the final reply natural and never mention "
@@ -147,7 +154,9 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
             "natural-language query containing the person and the relevant subject. Do not "
             "call this for greetings, ordinary small talk, transcription requests, or "
             "unrelated current tasks. Search before creating or changing a memory. Results "
-            "contain the saved statement, status, confidence, importance, and notes."
+            "contain the saved statement, status, confidence, importance, and notes. Use "
+            "date_from and date_to for a time period. Resolve relative periods using the "
+            "owner timezone and send ISO 8601 timestamps."
         ),
         "parameters": {
             "type": "object",
@@ -167,8 +176,19 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                     "maximum": 8,
                     "description": "Maximum number of relevant matches to return.",
                 },
+                "date_from": {
+                    "type": ["string", "null"],
+                    "description": "Inclusive ISO 8601 start.",
+                },
+                "date_to": {"type": ["string", "null"], "description": "Exclusive ISO 8601 end."},
+                "memory_types": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {"type": "string", "enum": MEMORY_TYPE_VALUES},
+                },
+                "person_name": {"type": ["string", "null"]},
             },
-            "required": ["query", "top_k"],
+            "required": ["query", "top_k", "date_from", "date_to", "memory_types", "person_name"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -366,8 +386,19 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
                     "maximum": 10,
                     "description": "Maximum number of matching planning records to return.",
                 },
+                "item_types": {
+                    "type": "array",
+                    "maxItems": 4,
+                    "items": {"type": "string", "enum": ["place", "idea", "event", "reminder"]},
+                },
+                "city": {"type": ["string", "null"]},
+                "date_from": {
+                    "type": ["string", "null"],
+                    "description": "Inclusive ISO 8601 start.",
+                },
+                "date_to": {"type": ["string", "null"], "description": "Exclusive ISO 8601 end."},
             },
-            "required": ["query", "top_k"],
+            "required": ["query", "top_k", "item_types", "city", "date_from", "date_to"],
             "additionalProperties": False,
         },
         "strict": True,

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wingman"
-version = "5.6.0"
+version = "5.7.0"
 description = "A private Telegram relationship wingman"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,6 +1,15 @@
 # Implementation plan
 
-Wingman 5.6.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.7.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.7 completed
+
+- Added timezone-aware date filters to memory and planning searches.
+- Resolved common periods such as yesterday, last week, last month, and this month.
+- Added planning filters for item type and city.
+- Included Telegram reply context in the agent context.
+- Included structured owned record context when the user replies to a memory or planning card.
+- Passed exact card record IDs to the model for updates without exposing them in normal replies.
 
 ## Phase 5.6 completed
 
@@ -586,7 +595,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.6.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 5.7.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 
@@ -670,7 +679,7 @@ Legacy persistence and action-ledger helpers remain available for migration comp
 
 Time-aware retrieval and Telegram reply context
 
-Status planned
+Status complete
 
 - Add date range, memory type, person, item type, city, and top-k filters to search tools.
 - Resolve phrases such as last week, last June, yesterday, this month, and between May and July using the configured timezone.

@@ -48,6 +48,7 @@ from wingman.services import (
     get_or_create_user,
     get_owned_memory,
     get_owned_planning_record,
+    get_telegram_card_context,
     list_events,
     list_places,
     list_reminders,
@@ -916,12 +917,22 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     "event": "event",
                     "reminder": "reminder",
                 }
-                selection_context = (
-                    f"The user selected this saved {labels[entity_type]} for the next turn.\n{text}"
-                )
                 with sessions() as session:
                     user = get_or_create_user(session, callback.from_user.id, settings.user_name)
                     conversation = get_or_create_conversation(session, user)
+                    card_context = get_telegram_card_context(
+                        session,
+                        user,
+                        callback.message.chat.id,
+                        callback.message.message_id,
+                    )
+                    selection_context = (
+                        f"The user selected this saved {labels[entity_type]} for the next turn.\n"
+                        + json.dumps(
+                            card_context or {"item_type": entity_type, "item_id": entity_id},
+                            sort_keys=True,
+                        )
+                    )
                     add_message(session, conversation, "user", selection_context)
                 await callback.message.edit_text(text, reply_markup=keyboard)
                 await callback.answer()
@@ -1280,6 +1291,24 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             summary = get_or_create_summary(session, conversation)
             pending_state = get_open_pending_state(session, user, conversation)
             current_action_ledger = action_ledger(session, user, conversation)
+            reply_context = ""
+            replied_to = message.reply_to_message
+            if replied_to is not None:
+                previous_text = replied_to.text or replied_to.caption or "[media message]"
+                reply_context = (
+                    "The user is replying to a previous bot message.\n"
+                    f"Previous bot message:\n{previous_text}\n"
+                    f"Current user message:\n{inbound.text}"
+                )
+                card_context = get_telegram_card_context(
+                    session, user, message.chat.id, replied_to.message_id
+                )
+                if card_context is not None:
+                    reply_context += (
+                        "\n\nThe previous bot message is a saved card. Treat this as the exact "
+                        "record reference for any update. Internal card context follows.\n"
+                        + json.dumps(card_context, sort_keys=True)
+                    )
             built_context = build_context(
                 user,
                 conversation,
@@ -1290,6 +1319,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 summary=summary,
                 pending_state=pending_state,
                 action_ledger=current_action_ledger,
+                reply_context=reply_context,
                 places=[],
                 ideas=[],
                 events=[],
@@ -1332,6 +1362,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     agent_run_id=run.id,
                     conversation=conversation,
                     source_message_id=user_message_id,
+                    timezone=settings.timezone,
                 )
                 return executor.execute(name, arguments)
 

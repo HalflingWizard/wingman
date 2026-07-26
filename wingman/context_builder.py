@@ -44,6 +44,7 @@ def build_context(
     events: list[Event] | None = None,
     reminders: list[Reminder] | None = None,
     action_ledger: dict[str, Any] | None = None,
+    reply_context: str = "",
     prompt_text: str = DEFAULT_PROMPT,
     max_messages: int = 20,
     max_memories: int = 8,
@@ -126,6 +127,8 @@ def build_context(
             )
             + "\nUse this only to finish or clarify the owner's requested actions."
         )
+    if reply_context:
+        dynamic_parts.append(reply_context)
     dynamic = "\n\n".join(dynamic_parts)
     messages = [(message.sender, message.text) for message in conversation.messages[-max_messages:]]
     while (

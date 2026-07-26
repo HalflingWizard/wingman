@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from wingman.models import Conversation, Memory, MemoryNote, User
 from wingman.services import list_memories
+from wingman.time_ranges import within_range
 
 WORD_RE = re.compile(r"[a-z0-9']+")
 STOP_WORDS = {
@@ -106,11 +107,15 @@ def retrieve_memories(
     query: str,
     limit: int = 8,
     query_vector: list[float] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> list[RetrievalResult]:
     query_words = _words(query)
     results: list[RetrievalResult] = []
     now = datetime.now(UTC)
     for memory in list_memories(session, user):
+        if not within_range(memory.created_at, date_from, date_to):
+            continue
         memory_words = _words(f"{memory.statement} {memory.embedding_text or ''}")
         notes = tuple(
             session.scalars(
@@ -155,12 +160,17 @@ def retrieve_memories(
     return results[:limit]
 
 
-def retrieval_query(query: str, user: User) -> dict[str, object]:
+def retrieval_query(
+    query: str, user: User, filters: dict[str, object] | None = None
+) -> dict[str, object]:
     return {
         "semantic_query": query,
         "keywords": sorted(_words(query)),
         "user_id": user.id,
-        "filters": {"status": ["confirmed", "observed", "inferred", "uncertain"]},
+        "filters": {
+            "status": ["confirmed", "observed", "inferred", "uncertain"],
+            **(filters or {}),
+        },
     }
 
 
