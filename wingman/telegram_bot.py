@@ -17,6 +17,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
+    BotCommand,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -43,7 +44,6 @@ from wingman.services import (
     action_ledger,
     add_message,
     create_agent_run,
-    create_memory,
     delete_planning_record,
     finish_agent_run,
     get_open_pending_state,
@@ -57,6 +57,8 @@ from wingman.services import (
     message_display_text,
     pending_deleted_cards,
     planning_context,
+    record_runtime_error,
+    reset_conversation,
     save_message_attachments,
     save_summary,
     save_telegram_card,
@@ -611,25 +613,18 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         if not statement:
             await message.answer("Use /remember followed by the detail you want to save.")
             return
+        await chat(message.model_copy(update={"text": f"Remember this explicitly. {statement}"}))
+
+    @router.message(Command("newchat"))
+    async def new_chat(message: TelegramMessage) -> None:
+        if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
+            return
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, settings.user_name)
-            memory = create_memory(session, user, statement)
-            memory_id = memory.id
-            card_text, keyboard = memory_card(memory)
-        if model_client is not None:
-            try:
-                vector = await model_client.embed(memory.statement, settings.openai_embedding_model)
-                with sessions() as session:
-                    user = get_or_create_user(session, message.from_user.id)
-                    set_memory_embedding(session, user, memory_id, vector)
-            except Exception:
-                pass
-        card = await message.answer(card_text, reply_markup=keyboard)
-        with sessions() as session:
-            user = get_or_create_user(session, message.from_user.id)
-            owned_memory = get_owned_memory(session, user, memory_id)
-            if owned_memory is not None:
-                save_telegram_card(session, owned_memory, message.chat.id, card.message_id)
+            reset_conversation(session, user)
+        await message.answer(
+            "The current conversation is cleared. Saved memories and plans remain."
+        )
 
     @router.callback_query(F.data.startswith("memory:"))
     async def memory_callback(callback: CallbackQuery) -> None:
@@ -835,6 +830,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
             await send_typing(message)
         except (RuntimeError, ValueError) as exc:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                record_runtime_error(session, user, "media processing", exc, message.message_id)
             reply = f"I could not process that input. {exc}"
             record_dashboard_status(message.caption or "[media message]", reply)
             await message.answer(reply)
@@ -1057,20 +1055,46 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 return executor.execute(name, arguments)
 
         try:
-            answer = await with_typing(
-                message,
-                model_client.reply(
-                    history,
-                    settings.user_name,
-                    settings.primary_person_name,
-                    built_context.static_context,
-                    built_context.dynamic_context,
-                    tool_executor=execute_model_tool,
-                    attachments=inbound.attachments,
+            answer = await asyncio.wait_for(
+                with_typing(
+                    message,
+                    model_client.reply(
+                        history,
+                        settings.user_name,
+                        settings.primary_person_name,
+                        built_context.static_context,
+                        built_context.dynamic_context,
+                        tool_executor=execute_model_tool,
+                        attachments=inbound.attachments,
+                    ),
                 ),
+                timeout=settings.response_timeout_seconds,
             )
+        except TimeoutError as exc:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                finish_agent_run(
+                    session,
+                    run.id,
+                    "failed",
+                    round((perf_counter() - started) * 1000),
+                    "The model response timed out",
+                    input_tokens=model_client.last_usage[0],
+                    output_tokens=model_client.last_usage[1],
+                )
+                record_runtime_error(
+                    session, user, "model response timeout", exc, message.message_id
+                )
+            reply = (
+                "I could not finish the reply because the language model took too long to respond."
+            )
+            record_dashboard_assistant(reply)
+            await message.answer(reply)
+            cleanup_inbound_attachments(inbound)
+            return
         except Exception as exc:
             with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
                 finish_agent_run(
                     session,
                     run.id,
@@ -1080,7 +1104,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     input_tokens=model_client.last_usage[0],
                     output_tokens=model_client.last_usage[1],
                 )
-            reply = "I ran into a problem while replying. Please try again."
+                record_runtime_error(session, user, "model response", exc, message.message_id)
+            reply = "I could not write a reply because the language model returned an error."
             record_dashboard_assistant(reply)
             await message.answer(reply)
             cleanup_inbound_attachments(inbound)
@@ -1216,6 +1241,13 @@ async def run_bot(settings: Settings) -> None:
         raise RuntimeError("Telegram bot token and owner ID are required")
     bot = Bot(settings.telegram_bot_token)
     try:
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Start Wingman"),
+                BotCommand(command="newchat", description="Clear the current conversation"),
+                BotCommand(command="remember", description="Explicitly save a detail"),
+            ]
+        )
         await build_dispatcher(settings).start_polling(bot)
     finally:
         await bot.session.close()

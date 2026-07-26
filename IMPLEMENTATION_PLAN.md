@@ -1,6 +1,6 @@
 # Implementation plan
 
-Wingman 4.0.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 4.1.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
 
 ## Product requirements
 
@@ -469,7 +469,9 @@ Each phase below is a release increment. Implementing Phase 4.1 produces version
 
 ### Phase 4.1
 
-Reliable owner commands and conversation reset
+Status complete
+
+Reliable owner commands, conversation reset, and user-visible failures
 
 - Add a concise `/newchat` command that closes the active conversation and starts a fresh one.
 - Preserve memories, planning records, usage records, and diagnostics when a chat is reset.
@@ -477,6 +479,9 @@ Reliable owner commands and conversation reset
 - Verify every command write in the database before showing its Telegram card.
 - Add command help and visible command descriptions in Telegram.
 - Increase voice-message limits safely with configurable size and duration limits, timeout handling, and cleanup tests.
+- Send a clear Telegram error when media processing, transcription, or model response handling fails.
+- Record detailed runtime errors with timestamps, source locations, exception types, tracebacks, and message IDs.
+- Treat a model response timeout as a failed response and notify the owner instead of leaving the message unanswered.
 
 ### Phase 4.2
 
@@ -499,22 +504,3 @@ Operational logs and failure history
 - Record processing failures without storing raw credentials or unnecessary media bytes.
 - Add filtering by date, error type, operation, and severity.
 - Keep live output bounded and make detailed errors copyable and scrollable.
-
-### Phase 4.4
-
-Visible processing status stickers
-
-- Add owner-configured Telegram sticker IDs for each transient processing state.
-- Use short-lived states for message received, downloading media, processing images, processing video, transcribing audio, reading a document, searching memories, saving records, calling the model, and handling an error.
-- Delete the previous status sticker before sending the next one and clean up after completion or failure.
-- Keep typing status active only while model response work is running.
-- Add configuration validation and mocked lifecycle tests for status ordering and cleanup.
-
-### Phase 4.5
-
-Release hardening and observability review
-
-- Verify command flows, reset behavior, retrieval quality, schema validation, runtime logs, error history, status stickers, media cleanup, and dashboard freshness together.
-- Add end-to-end mocked tests for multi-action remember requests and partial failures.
-- Update all current-version documentation and create `RELEASE_NOTES_v4.5.0.md` only when that release is complete.
-- Remove superseded release-note files after the current release notes are published.

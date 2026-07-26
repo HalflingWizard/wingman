@@ -306,6 +306,21 @@ class ToolExecution(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class RuntimeErrorLog(Base):
+    __tablename__ = "runtime_error_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    stage: Mapped[str] = mapped_column(String(80))
+    message: Mapped[str] = mapped_column(Text)
+    exception_type: Mapped[str] = mapped_column(String(160))
+    source_file: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    source_line: Mapped[int | None] = mapped_column(nullable=True)
+    traceback_text: Mapped[str] = mapped_column(Text, default="")
+    telegram_message_id: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class RetrievalLog(Base):
     __tablename__ = "retrieval_logs"
 

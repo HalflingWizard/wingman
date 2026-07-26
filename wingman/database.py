@@ -36,6 +36,7 @@ def initialize_database(settings: Settings) -> None:
         Place,
         Reminder,
         RetrievalLog,
+        RuntimeErrorLog,
         SavedIdea,
         SummaryUpdate,
         TelegramCard,

@@ -40,7 +40,7 @@ Do not require live Telegram or OpenAI credentials for tests. If a change sends 
 
 ## Version and phase policy
 
-The current release is 4.0.0. Every implemented phase increments the release version.
+The current release is 4.1.0. Every implemented phase increments the release version.
 
 | Phase | Version |
 | --- | --- |
@@ -88,7 +88,7 @@ The dashboard is server-rendered in `wingman/web.py` and should remain usable wi
 
 Telegram may deliver albums, captions, long text, and media as separate updates. Preserve the batching and quiet-period behavior when changing intake. Test text, voice, image, document, video, circular video, captions, and multiple attachments.
 
-The owner-facing flow should show typing while model work is in progress. Future transient status stickers must be short-lived, deleted before the next status, and never remain as conversation clutter.
+The owner-facing flow should show typing while model work is in progress. Do not add transient status stickers unless the owner brings that phase back into scope.
 
 ## Updates and deployment
 

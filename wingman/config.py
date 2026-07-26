@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     video_max_bytes: int = Field(default=50_000_000, ge=1_000_000, le=100_000_000)
     video_max_duration_seconds: int = Field(default=300, ge=5, le=900)
     video_processing_timeout_seconds: int = Field(default=90, ge=10, le=300)
+    response_timeout_seconds: int = Field(default=120, ge=15, le=900)
     attachment_retention_seconds: int = Field(default=600, ge=60, le=3600)
     summary_threshold: int = Field(default=10, ge=2, le=500)
     recent_message_limit: int = Field(default=10, ge=2, le=100)

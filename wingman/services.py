@@ -1,6 +1,7 @@
 """Persistence and validated domain services."""
 
 import json
+import traceback
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -21,6 +22,7 @@ from wingman.models import (
     PendingState,
     Place,
     Reminder,
+    RuntimeErrorLog,
     SavedIdea,
     SummaryUpdate,
     TelegramCard,
@@ -911,6 +913,69 @@ def record_tool_execution(
     session.add(execution)
     session.commit()
     return execution
+
+
+def record_runtime_error(
+    session: Session,
+    user: User,
+    stage: str,
+    error: BaseException,
+    telegram_message_id: int | None = None,
+) -> RuntimeErrorLog:
+    """Persist detailed failure information without exposing it in Telegram."""
+    frames = traceback.extract_tb(error.__traceback__)
+    frame = frames[-1] if frames else None
+    record = RuntimeErrorLog(
+        user_id=user.id,
+        stage=stage,
+        message=str(error) or error.__class__.__name__,
+        exception_type=error.__class__.__name__,
+        source_file=frame.filename if frame else None,
+        source_line=frame.lineno if frame else None,
+        traceback_text="".join(traceback.format_exception(error)),
+        telegram_message_id=telegram_message_id,
+    )
+    session.add(record)
+    session.commit()
+    return record
+
+
+def reset_conversation(session: Session, user: User) -> str:
+    """Clear conversation history while preserving memories and planning records."""
+    conversation = get_or_create_conversation(session, user)
+    message_ids = list(
+        session.scalars(select(Message.id).where(Message.conversation_id == conversation.id))
+    )
+    if message_ids:
+        session.query(MessageAttachment).filter(
+            MessageAttachment.message_id.in_(message_ids)
+        ).delete(synchronize_session=False)
+        session.query(Message).filter(Message.id.in_(message_ids)).delete(synchronize_session=False)
+    summary = session.scalar(
+        select(ConversationSummary).where(ConversationSummary.conversation_id == conversation.id)
+    )
+    if summary is not None:
+        session.query(SummaryUpdate).filter(SummaryUpdate.summary_id == summary.id).delete(
+            synchronize_session=False
+        )
+        session.delete(summary)
+    session.query(PendingState).filter(PendingState.conversation_id == conversation.id).delete(
+        synchronize_session=False
+    )
+    group_ids = list(
+        session.scalars(
+            select(ActionGroup.id).where(ActionGroup.conversation_id == conversation.id)
+        )
+    )
+    if group_ids:
+        session.query(ActionItem).filter(ActionItem.group_id.in_(group_ids)).delete(
+            synchronize_session=False
+        )
+        session.query(ActionGroup).filter(ActionGroup.id.in_(group_ids)).delete(
+            synchronize_session=False
+        )
+    session.commit()
+    return conversation.id
 
 
 def save_telegram_card(

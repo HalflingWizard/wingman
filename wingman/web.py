@@ -24,7 +24,15 @@ from wingman import __version__
 from wingman.config import Settings, get_settings, save_runtime_settings
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, schedule_restart, set_paused
-from wingman.models import AgentRun, Conversation, ConversationSummary, Message, ToolExecution, User
+from wingman.models import (
+    AgentRun,
+    Conversation,
+    ConversationSummary,
+    Message,
+    RuntimeErrorLog,
+    ToolExecution,
+    User,
+)
 from wingman.prompting import load_prompt, save_prompt
 from wingman.services import (
     add_memory_note,
@@ -1062,6 +1070,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     .limit(30)
                 )
             )
+            runtime_errors = list(
+                session.scalars(
+                    select(RuntimeErrorLog)
+                    .where(RuntimeErrorLog.user_id == user.id)
+                    .order_by(RuntimeErrorLog.created_at.desc())
+                    .limit(100)
+                )
+            )
         execution_cards = []
         for execution in executions:
             try:
@@ -1101,9 +1117,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"<p class='muted'>{escape(run.created_at.isoformat())}. Error {escape(run.error or 'none')}</p>"
                 f"{code_panel('Agent response summary', response_data, 300)}</article>"
             )
+        error_cards = []
+        for error in runtime_errors:
+            location = (
+                f"{error.source_file}:{error.source_line}"
+                if error.source_file and error.source_line
+                else "source unavailable"
+            )
+            error_cards.append(
+                "<article class='record'>"
+                f"<div class='record-top'><h2>{escape(error.stage)}</h2>"
+                f"<span class='badge'>{escape(error.exception_type)}</span></div>"
+                f"<p class='muted'>{escape(error.created_at.isoformat())}. {escape(location)}. Telegram message {escape(str(error.telegram_message_id or 'none'))}</p>"
+                f"<p>{escape(error.message)}</p>{code_panel('Traceback', error.traceback_text, 320)}</article>"
+            )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Runtime diagnostics</p><h1>Logs</h1>"
             "<p class='muted'>Inspect what tools were called, what they returned, and whether persistence was verified. Secrets are redacted.</p></div></header>"
+            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-triangle-exclamation'></i> Error history</h2>"
+            + ("".join(error_cards) or "<p class='muted'>No runtime errors recorded.</p>")
+            + "</section>"
             "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-list-check'></i> Tool executions</h2>"
             + ("".join(execution_cards) or "<p class='muted'>No tool executions recorded yet.</p>")
             + "</section><section class='panel'><h2 class='section-title'><i class='fa-solid fa-robot'></i> Agent runs</h2>"
