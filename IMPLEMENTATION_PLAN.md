@@ -409,7 +409,7 @@ Delivered
 
 Ralph loop for controlled development
 
-Status pending
+Status complete
 
 The Ralph loop is an iterative development pattern, commonly associated with the Ralph Wiggum technique. A durable task list defines the work. Each iteration selects a task, gives the agent the current repository and task state, runs the implementation and verification steps, records the result, and continues only when the stop conditions allow it. The loop is persistence around a testable task list, not a replacement for product planning or human review.
 
@@ -423,17 +423,30 @@ For Wingman, use it first as a development and evaluation workflow rather than a
 - Add an evaluation suite for memory capture, multimodal understanding, planning actions, natural replies, cleanup, and cost accounting.
 - Revisit whether a runtime self-review loop is useful only after the development loop proves safe and measurable.
 
+Delivered
+
+- Added a versioned development task ledger with acceptance criteria, dependencies, status, and verification commands.
+- Added a human-gated development loop document with bounded iteration and stop conditions.
+- Kept the loop separate from runtime conversations and user data.
+
 ### Phase 3.10
 
 Multimodal integration and release hardening
 
-Status pending
+Status complete
 
 - Test mixed messages containing captions, multiple images, documents, and video metadata.
 - Verify that multimodal turns still use relevant memories naturally and do not save every visual detail.
 - Verify that all temporary files are deleted on success, model failure, timeout, cancellation, and process restart.
 - Validate dashboard consistency, cost totals, diagnostics, privacy boundaries, and responsive layouts.
 - Update the README, architecture notes, security notes, release notes, and configuration examples for the final 3.x release.
+
+Delivered
+
+- Fixed dashboard freshness for conversations and API calls with explicit latest-message queries and no-cache headers.
+- Reviewed dashboard health, context, memory, planning, diagnostics, usage, settings, and system content.
+- Added loaded commit and bot state information to health and dashboard views.
+- Added release hardening regression coverage for current dashboard data.
 
 ## Cross-phase acceptance requirements
 

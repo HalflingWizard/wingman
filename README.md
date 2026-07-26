@@ -148,6 +148,8 @@ The project is a small Python monolith using FastAPI, aiogram, SQLAlchemy, SQLit
 - [Architecture](ARCHITECTURE.md)
 - [Security notes](SECURITY.md)
 - [Implementation history](IMPLEMENTATION_PLAN.md)
+- [Controlled development loop](DEVELOPMENT_LOOP.md)
+- [Development task ledger](DEVELOPMENT_TASKS.json)
 - [Version 3.0.0 release notes](RELEASE_NOTES_v3.0.0.md)
 
 ## License

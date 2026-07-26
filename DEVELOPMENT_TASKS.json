@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "project": "wingman",
+  "policy": {
+    "one_task_per_iteration": true,
+    "human_review_required": true,
+    "stop_on_repeated_failure": true
+  },
+  "tasks": [
+    {
+      "id": "3.9-dashboard-freshness",
+      "title": "Keep dashboard views current",
+      "status": "complete",
+      "dependencies": [],
+      "acceptance": [
+        "Latest persisted conversation messages appear in Conversations",
+        "Latest persisted agent runs appear in API calls",
+        "Live dashboard pages disable browser caching"
+      ],
+      "verification": "pytest -q tests/test_phase34.py"
+    },
+    {
+      "id": "3.10-release-hardening",
+      "title": "Validate dashboard and multimodal release behavior",
+      "status": "complete",
+      "dependencies": ["3.9-dashboard-freshness"],
+      "acceptance": [
+        "Dashboard pages expose current state and repository revision",
+        "Multimodal cleanup and diagnostics remain covered",
+        "The complete test suite passes"
+      ],
+      "verification": "pytest -q"
+    }
+  ]
+}

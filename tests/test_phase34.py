@@ -3,7 +3,12 @@ from fastapi.testclient import TestClient
 from wingman.config import Settings
 from wingman.database import initialize_database, session_factory
 from wingman.models import User
-from wingman.services import get_or_create_conversation
+from wingman.services import (
+    add_message,
+    create_agent_run,
+    finish_agent_run,
+    get_or_create_conversation,
+)
 from wingman.tools import MemoryToolExecutor
 from wingman.web import create_app
 
@@ -50,6 +55,29 @@ def test_system_page_exposes_safe_database_scope_diagnostics(tmp_path):
     assert response.status_code == 200
     assert "Repository update" in response.text
     assert "Database diagnostics" not in response.text
+
+
+def test_conversations_and_api_calls_show_latest_persisted_message_and_run(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'test.db'}",
+        telegram_owner_id=42,
+        user_name="Owner",
+    )
+    initialize_database(settings)
+    with session_factory(settings)() as session:
+        user = User(telegram_user_id=42, name="Owner")
+        session.add(user)
+        session.commit()
+        conversation = get_or_create_conversation(session, user)
+        add_message(session, conversation, "user", "This is the newest Telegram message")
+        run = create_agent_run(session, conversation, "gpt-5-nano", '{"user_prompt":"new"}')
+        finish_agent_run(session, run.id, "completed", response_snapshot="new response")
+    client = TestClient(create_app(settings))
+    conversations = client.get("/conversations")
+    api_calls = client.get("/api-calls")
+    assert "This is the newest Telegram message" in conversations.text
+    assert "new response" in api_calls.text
+    assert "no-cache" in api_calls.headers["Cache-Control"]
 
 
 def test_planning_tool_results_are_database_verified(tmp_path):

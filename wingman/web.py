@@ -21,7 +21,7 @@ from wingman import __version__
 from wingman.config import Settings, get_settings, save_runtime_settings
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, schedule_restart, set_paused
-from wingman.models import AgentRun, Conversation, ConversationSummary, ToolExecution, User
+from wingman.models import AgentRun, Conversation, ConversationSummary, Message, ToolExecution, User
 from wingman.prompting import load_prompt, save_prompt
 from wingman.services import (
     add_memory_note,
@@ -211,7 +211,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def prevent_dashboard_caching(request: Request, call_next: Any) -> Response:
         response: Response = await call_next(request)
         if request.url.path == "/" or request.url.path.startswith(
-            ("/memories", "/planning", "/context", "/conversations", "/health", "/system")
+            (
+                "/memories",
+                "/planning",
+                "/context",
+                "/conversations",
+                "/health",
+                "/system",
+                "/api-calls",
+                "/logs",
+                "/usage",
+                "/retrieval",
+                "/settings",
+            )
         ):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
             response.headers["Pragma"] = "no-cache"
@@ -223,6 +235,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health", response_class=HTMLResponse)
     def health() -> str:
+        revision = repository_version()
         database = "ok"
         try:
             with make_engine(active_settings).connect() as connection:
@@ -235,6 +248,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else "not configured"
         )
         openai = "configured" if active_settings.openai_api_key else "not configured"
+        bot_state = "paused" if is_paused(active_settings) else "running"
         body = (
             f"<header class='page-header'><div><p class='eyebrow'>System overview</p>"
             f"<h1>Health</h1><p class='muted'>A quick view of the local services Wingman uses.</p></div>"
@@ -243,6 +257,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-database'></i></div><span class='stat-value'>{escape(database)}</span><span class='stat-label'>Database</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-brands fa-telegram'></i></div><span class='stat-value'>{escape(telegram)}</span><span class='stat-label'>Telegram</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-wand-magic-sparkles'></i></div><span class='stat-value'>{escape(openai)}</span><span class='stat-label'>OpenAI</span></div>"
+            f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-power-off'></i></div><span class='stat-value'>{escape(bot_state)}</span><span class='stat-label'>Bot state</span></div>"
+            f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-code-branch'></i></div><span class='stat-value'>{escape(revision['commit'][:12])}</span><span class='stat-label'>Loaded commit</span></div>"
             "</div>"
         )
         return page_shell("Health", body, "health")
@@ -1001,11 +1017,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         ConversationSummary.conversation_id == conversation.id
                     )
                 )
+                recent_messages = list(
+                    session.scalars(
+                        select(Message)
+                        .where(Message.conversation_id == conversation.id)
+                        .order_by(Message.created_at.desc())
+                        .limit(20)
+                    )
+                )
                 messages = "".join(
                     f"<div class='message message-{'user' if message.sender == 'user' else 'assistant'}'>"
                     f"<div class='message-label'><i class='fa-solid fa-{'user' if message.sender == 'user' else 'robot'}'></i>"
                     f"{escape(message.sender.capitalize())}</div><p>{escape(message.text)}</p></div>"
-                    for message in conversation.messages[-20:]
+                    for message in reversed(recent_messages)
                 )
                 cards.append(
                     "<article class='record'>"
