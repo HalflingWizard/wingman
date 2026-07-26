@@ -14,6 +14,9 @@ class InboundAttachment:
     filename: str | None = None
     content_type: str | None = None
     local_path: str | None = None
+    size_bytes: int | None = None
+    width: int | None = None
+    height: int | None = None
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC) + timedelta(minutes=10))
 
 

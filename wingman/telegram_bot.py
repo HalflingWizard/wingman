@@ -6,6 +6,7 @@ from collections.abc import Awaitable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from tempfile import NamedTemporaryFile
 from time import perf_counter
 from typing import Any
 
@@ -178,11 +179,72 @@ async def transcribe_voice(
     )
 
 
+async def download_photos(messages: list[TelegramMessage], settings: Settings) -> InboundMessage:
+    if not messages or any(not message.photo or message.bot is None for message in messages):
+        raise ValueError("Image message is not available")
+    if len(messages) > settings.max_attachments:
+        raise ValueError(f"I can process at most {settings.max_attachments} images at a time")
+    attachments: list[InboundAttachment] = []
+    total_bytes = 0
+    try:
+        for message in messages:
+            if message.photo is None or message.bot is None:
+                raise ValueError("Image message is not available")
+            photo = message.photo[-1]
+            if photo.file_size and photo.file_size > settings.image_max_bytes:
+                raise ValueError("Image is too large")
+            remote_file = await message.bot.get_file(photo.file_id)
+            if not remote_file.file_path:
+                raise RuntimeError("Telegram did not provide an image file path")
+            buffer = BytesIO()
+            try:
+                await message.bot.download_file(remote_file.file_path, destination=buffer)
+                image = buffer.getvalue()
+            finally:
+                buffer.close()
+            if len(image) > settings.image_max_bytes:
+                raise ValueError("Image is too large")
+            total_bytes += len(image)
+            if total_bytes > settings.image_total_max_bytes:
+                raise ValueError("The combined image size is too large")
+            with NamedTemporaryFile(prefix="wingman-image-", suffix=".jpg", delete=False) as file:
+                file.write(image)
+                local_path = file.name
+            attachments.append(
+                InboundAttachment(
+                    source_type="telegram_image",
+                    provider_file_id=photo.file_id,
+                    filename="wingman-image.jpg",
+                    content_type="image/jpeg",
+                    local_path=local_path,
+                    size_bytes=len(image),
+                    width=photo.width,
+                    height=photo.height,
+                    expires_at=datetime.now(UTC)
+                    + timedelta(seconds=settings.attachment_retention_seconds),
+                )
+            )
+    except Exception:
+        cleanup_inbound_attachments(InboundMessage("", attachments=tuple(attachments)))
+        raise
+    return InboundMessage(
+        text=next((message.caption or "" for message in messages if message.caption), ""),
+        source_type="telegram_image",
+        provider_message_id=messages[0].message_id,
+        attachments=tuple(attachments),
+    )
+
+
+async def download_photo(message: TelegramMessage, settings: Settings) -> InboundMessage:
+    return await download_photos([message], settings)
+
+
 def build_dispatcher(settings: Settings) -> Dispatcher:
     dispatcher = Dispatcher()
     router = Router()
     sessions = session_factory(settings)
     model_client = ModelClient(settings) if settings.openai_api_key else None
+    image_groups: dict[str, list[TelegramMessage]] = {}
 
     @router.message(CommandStart())
     async def start(message: TelegramMessage) -> None:
@@ -288,7 +350,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     async def chat(message: TelegramMessage) -> None:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
-        if not message.text and message.voice is None:
+        if not message.text and message.voice is None and not message.photo:
             await message.answer(
                 "I can process text messages right now. Voice messages and other media support "
                 "will be added soon."
@@ -307,6 +369,23 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 inbound = await with_typing(
                     message, transcribe_voice(message, model_client, settings)
                 )
+            elif message.photo:
+                if model_client is None:
+                    await message.answer("I need an OpenAI API key to analyze images.")
+                    return
+                if message.media_group_id:
+                    group_id = message.media_group_id
+                    if group_id in image_groups:
+                        image_groups[group_id].append(message)
+                        return
+                    image_groups[group_id] = [message]
+                    await asyncio.sleep(0.35)
+                    grouped_messages = image_groups.pop(group_id, [])
+                    inbound = await with_typing(
+                        message, download_photos(grouped_messages, settings)
+                    )
+                else:
+                    inbound = await with_typing(message, download_photo(message, settings))
             else:
                 inbound = InboundMessage(
                     text=message.text or "",
@@ -315,7 +394,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 )
             await send_typing(message)
         except (RuntimeError, ValueError) as exc:
-            await message.answer(f"I could not process that voice message. {exc}")
+            await message.answer(f"I could not process that input. {exc}")
             return
         if len(inbound.attachments) > settings.max_attachments:
             await message.answer("I can process only a small number of attachments at a time.")
@@ -342,9 +421,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         query_vector = None
         if model_client is not None:
             try:
-                query_vector = await with_typing(
-                    message, model_client.embed(inbound.text, settings.openai_embedding_model)
-                )
+                if inbound.text.strip():
+                    query_vector = await with_typing(
+                        message, model_client.embed(inbound.text, settings.openai_embedding_model)
+                    )
             except Exception:
                 pass
         user_message_id: str | None = None
@@ -490,6 +570,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             history = built_context.messages
         if model_client is None:
             await message.answer("I am connected, but the OpenAI API key is not configured yet.")
+            cleanup_inbound_attachments(inbound)
             return
         request_snapshot = json.dumps(
             {
@@ -531,6 +612,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     built_context.static_context,
                     built_context.dynamic_context,
                     tool_executor=execute_model_tool,
+                    attachments=inbound.attachments,
                 ),
             )
         except Exception as exc:

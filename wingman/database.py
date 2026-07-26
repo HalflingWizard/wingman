@@ -54,9 +54,22 @@ def initialize_database(settings: Settings) -> None:
                 "embedding_json": "TEXT",
                 "last_retrieved_at": "DATETIME",
             }
+            attachment_columns = {
+                "size_bytes": "INTEGER",
+                "width": "INTEGER",
+                "height": "INTEGER",
+            }
+            attachment_table_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(message_attachments)"))
+            }
             for name, definition in additions.items():
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE memories ADD COLUMN {name} {definition}"))
+            for name, definition in attachment_columns.items():
+                if name not in attachment_table_columns:
+                    connection.execute(
+                        text(f"ALTER TABLE message_attachments ADD COLUMN {name} {definition}")
+                    )
 
 
 def session_factory(settings: Settings) -> sessionmaker[Session]:

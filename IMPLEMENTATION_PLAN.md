@@ -314,7 +314,7 @@ Delivered
 
 Image messages and multimodal request foundations
 
-Status pending
+Status complete
 
 - Accept image-only messages and image messages with a caption.
 - Support up to five images per message by default, with a safe configurable maximum of ten.
@@ -324,6 +324,15 @@ Status pending
 - Enforce per-file size, total message size, count, content-type, and timeout limits.
 - Delete downloaded image files after the model response or failure and never retain image bytes in the database.
 - Add image diagnostics that record metadata and usage without storing raw image content in request snapshots.
+
+Delivered
+
+- Added Telegram image and media-group handling with caption support and a default five-image limit.
+- Added per-image and total byte limits, ordered temporary attachments, and cleanup after processing.
+- Added multimodal Responses API input using ordered text and image content parts.
+- Added image metadata fields for provider ID, size, dimensions, media type, and expiration tracking.
+- Added sanitized image diagnostics that omit raw image bytes from API snapshots.
+- Added regression tests for image-only input, captioned images, diagnostics, and cleanup.
 
 ### Phase 3.6
 

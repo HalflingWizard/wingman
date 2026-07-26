@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     openai_transcription_model: str = "gpt-4o-mini-transcribe"
     voice_max_bytes: int = Field(default=25_000_000, ge=1_000_000, le=25_000_000)
     max_attachments: int = Field(default=5, ge=1, le=10)
+    image_max_bytes: int = Field(default=10_000_000, ge=100_000, le=25_000_000)
+    image_total_max_bytes: int = Field(default=30_000_000, ge=100_000, le=50_000_000)
     attachment_retention_seconds: int = Field(default=600, ge=60, le=3600)
     summary_threshold: int = Field(default=40, ge=10, le=500)
     recent_message_limit: int = Field(default=20, ge=5, le=100)

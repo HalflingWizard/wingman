@@ -3,14 +3,17 @@
 # Tool schemas are intentionally kept inline for API snapshot readability.
 # ruff: noqa: E501
 
+import base64
 import json
 from collections.abc import Callable
+from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
 from openai import AsyncOpenAI
 
 from wingman.config import Settings
+from wingman.inbound import InboundAttachment
 
 ToolExecutor = Callable[[str, dict[str, Any]], dict[str, Any]]
 
@@ -335,6 +338,7 @@ class ModelClient:
         self.last_usage: tuple[int | None, int | None] = (None, None)
         self.last_request_snapshot: dict[str, Any] = {}
         self.last_transcription_snapshot: dict[str, Any] = {}
+        self.last_image_snapshot: dict[str, Any] = {"count": 0, "images": []}
 
     async def reply(
         self,
@@ -344,6 +348,7 @@ class ModelClient:
         static_context: str = "",
         dynamic_context: str = "",
         tool_executor: ToolExecutor | None = None,
+        attachments: tuple[InboundAttachment, ...] = (),
     ) -> str:
         self.last_tool_trace: list[dict[str, Any]] = []
         prompt = (
@@ -386,7 +391,7 @@ class ModelClient:
             f"The user's name is {user_name or 'the user'}. The person discussed is "
             f"{person_name or 'someone important to the user'}."
         )
-        input_messages: list[dict[str, str]] = []
+        input_messages: list[dict[str, Any]] = []
         if dynamic_context:
             input_messages.append(
                 {
@@ -399,6 +404,52 @@ class ModelClient:
                 }
             )
         input_messages.extend({"role": role, "content": text} for role, text in messages[-20:])
+        image_attachments = tuple(
+            attachment
+            for attachment in attachments
+            if (attachment.content_type or "").casefold().startswith("image/")
+        )
+        if image_attachments:
+            if not input_messages or input_messages[-1].get("role") != "user":
+                raise ValueError("Image input must be attached to a user message")
+            content: list[dict[str, Any]] = []
+            caption = str(input_messages[-1].get("content") or "").strip()
+            if caption:
+                content.append({"type": "input_text", "text": caption})
+            image_diagnostics: list[dict[str, Any]] = []
+            for attachment in image_attachments:
+                if not attachment.local_path:
+                    raise ValueError("Image input is missing its temporary file")
+                image_bytes = Path(attachment.local_path).read_bytes()
+                content.append(
+                    {
+                        "type": "input_image",
+                        "image_url": (
+                            f"data:{attachment.content_type or 'image/jpeg'};base64,"
+                            + base64.b64encode(image_bytes).decode("ascii")
+                        ),
+                        "detail": "low",
+                    }
+                )
+                image_diagnostics.append(
+                    {
+                        "filename": attachment.filename,
+                        "content_type": attachment.content_type,
+                        "provider_file_id": attachment.provider_file_id,
+                        "size_bytes": len(image_bytes),
+                        "width": attachment.width,
+                        "height": attachment.height,
+                        "raw_bytes_retained": False,
+                    }
+                )
+            input_messages[-1] = {"role": "user", "content": content}
+            self.last_image_snapshot = {
+                "count": len(image_diagnostics),
+                "images": image_diagnostics,
+                "raw_bytes_retained": False,
+            }
+        else:
+            self.last_image_snapshot = {"count": 0, "images": [], "raw_bytes_retained": False}
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": prompt,
@@ -412,7 +463,22 @@ class ModelClient:
             request["tools"] = AVAILABLE_TOOLS
             request["tool_choice"] = "auto"
             request["parallel_tool_calls"] = True
-        self.last_request_snapshot = request
+        snapshot_input: list[dict[str, Any]] = []
+        for item in input_messages:
+            snapshot_item = dict(item)
+            if isinstance(snapshot_item.get("content"), list):
+                snapshot_content = []
+                for content_item in snapshot_item["content"]:
+                    safe_item = dict(content_item)
+                    if safe_item.get("type") == "input_image":
+                        safe_item["image_url"] = "[image bytes omitted]"
+                    snapshot_content.append(safe_item)
+                snapshot_item["content"] = snapshot_content
+            snapshot_input.append(snapshot_item)
+        snapshot_request = dict(request)
+        snapshot_request["input"] = snapshot_input
+        snapshot_request["image_diagnostics"] = self.last_image_snapshot
+        self.last_request_snapshot = snapshot_request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:
             action_tracking_active = False
