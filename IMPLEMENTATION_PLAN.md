@@ -92,7 +92,7 @@ The test suite covers configuration, persistence, Telegram authorization, memory
 
 ## Next development sequence
 
-The next work should use incremental 2.x phases. These are planning labels for the next development cycle, not separate release promises. Each phase should leave the application runnable and preserve natural conversation as the primary product requirement.
+The completed 2.x work is recorded below. The next work uses incremental 3.x phases. These are planning labels for the next development cycle, not separate release promises. Each phase should leave the application runnable and preserve natural conversation as the primary product requirement.
 
 ### Phase 2.1
 
@@ -225,6 +225,171 @@ Status complete
 - Treat copy prevention for password fields as a weak usability feature rather than a security boundary. Browser controls and developer tools can still expose user-entered values.
 - Test the dashboard at narrow and wide viewport sizes and check keyboard labels, focus states, contrast, and form errors.
 
+## Version 3.x roadmap
+
+The next release family will improve action reliability first, then add multimodal conversation, usage accounting, and controlled development automation. The action coordinator is intentionally first because memories, planning records, image analysis, document reading, and video processing all need the same completion and recovery rules.
+
+### Phase 3.1
+
+Action extraction and pending action ledger
+
+Status complete
+
+- Extract every requested memory, note, planning action, and future media action from one user message.
+- Assign every action a stable ID and store its type, source message, target entity, arguments, and status.
+- Track pending, completed, duplicate, needs clarification, failed, dismissed, and blocked states.
+- Store the complete pending action group so replies such as “yes”, “save those”, or “save the first and third” resolve against the original list.
+- Make action records durable across turns and process restarts.
+- Keep action state separate from the assistant’s natural response text.
+
+Delivered
+
+- Added durable action groups and action items with source message, stable action ID, status, result, and error fields.
+- Added action ledger lookup and grouped confirmation across turns.
+
+### Phase 3.2
+
+Bounded action completion coordinator
+
+Status complete
+
+- Replace the current model-only continuation behavior with an application-controlled completion loop.
+- Execute valid actions, record the results, inspect the remaining action ledger, and continue when work remains.
+- Treat duplicates as handled and retry safe failures only when the retry policy allows it.
+- Stop only when all actions are completed, duplicated, dismissed, blocked, or require information from the owner.
+- Add maximum rounds, action count, tool call count, token, time, and retry limits.
+- Prevent duplicate execution with action IDs and idempotency checks.
+- Record every continuation round in API diagnostics.
+- Generate the final response from actual action state rather than trusting the model to claim completion.
+
+Delivered
+
+- Added an eight-round application-controlled continuation loop.
+- The loop checks pending action state and continues without asking the owner to repeat the request.
+- Tool execution results are written back to the ledger with completion, duplicate, clarification, or failure status.
+
+### Phase 3.3
+
+Natural multi-action confirmations and cards
+
+Status complete
+
+- Save several explicit details in one turn without asking for permission again.
+- Confirm a complete proposal group when the owner says “yes”.
+- Resolve partial confirmations such as “save cats and Hello Kitty” without reopening unrelated items.
+- Ask only about unresolved or ambiguous items.
+- Keep parameters, counts, confidence values, IDs, and database operations out of normal replies.
+- Show a Telegram card for every successfully created memory or planning record.
+- Keep deletion and later editing tied to the correct action and entity IDs.
+- Add regression tests for partial saves, repeated confirmations, duplicates, retries, and restart recovery.
+
+Delivered
+
+- Added grouped registration and confirmation tools to the Responses API tool set.
+- Added action IDs to memory and planning write tools.
+- Added current action ledger context to the next conversation turn.
+- Kept normal replies focused on natural conversation while cards remain responsible for record details and controls.
+
+### Phase 3.4
+
+Database consistency and dashboard freshness
+
+Status pending
+
+- Reproduce cases where a Telegram memory card exists but the dashboard does not show the record.
+- Verify the active database path, owner ID, process working directory, settings cache, and transaction boundaries used by Telegram and FastAPI.
+- Show safe diagnostic information in the dashboard so the active database and owner scope can be compared without exposing secrets.
+- Make dashboard reads use the same configured settings and database source as the bot.
+- Add refresh behavior after writes and an optional manual refresh indicator with the last-read time.
+- Add tests that create records through the Telegram service path and immediately read them through dashboard routes.
+
+### Phase 3.5
+
+Image messages and multimodal request foundations
+
+Status pending
+
+- Accept image-only messages and image messages with a caption.
+- Support up to five images per message by default, with a safe configurable maximum of ten.
+- Preserve image order, captions, provider IDs, media type, dimensions, and expiration metadata.
+- Send images and captions to the model as multimodal input while keeping memory retrieval, planning tools, and natural replies unchanged.
+- Let the model infer intent from screenshots, conversation captures, photos, and other allowed images without requiring a special command.
+- Enforce per-file size, total message size, count, content-type, and timeout limits.
+- Delete downloaded image files after the model response or failure and never retain image bytes in the database.
+- Add image diagnostics that record metadata and usage without storing raw image content in request snapshots.
+
+### Phase 3.6
+
+Supported document attachments
+
+Status pending
+
+- Accept an explicit allowlist of readable formats, initially PDF, DOCX, TXT, Markdown, CSV, and JSON.
+- Reject executables, archives, unsupported office formats, and unknown extensions with a clear user-facing message.
+- Decide per format whether to use provider file input or local extraction, based on size, privacy, and API support.
+- Preserve document name, type, size, page or character estimates, and processing status without retaining the local file.
+- Send extracted or provider-readable content together with the caption and other message content.
+- Apply page, character, size, and timeout limits so a large document cannot consume the entire context budget.
+- Add tests for valid files, invalid files, extraction failures, cleanup, and mixed image plus document messages.
+
+### Phase 3.7
+
+Video understanding pipeline
+
+Status pending
+
+- Accept supported video messages within strict size and duration limits.
+- Extract the audio track into a temporary buffer and transcribe it through the existing transcription path.
+- Sample five frames from evenly distributed parts of the video, including the beginning and end when possible.
+- Send the five ordered frames, the transcript, and the user caption to the model with explicit labels explaining what each input represents.
+- Keep the video, extracted audio, and frame files temporary and delete them after success, failure, or timeout.
+- Return a useful error when video processing tools are unavailable or the media cannot be decoded.
+- Add diagnostics for duration, frame count, transcription status, model usage, and cleanup status without storing media bytes.
+
+### Phase 3.8
+
+Cost and usage dashboard
+
+Status pending
+
+- Create a usage ledger for every model operation, including conversation replies, summaries, embeddings, transcription, image processing, document processing, and video processing.
+- Record operation type, model, provider, timestamp, input and output tokens when available, media units, pricing version, estimated cost, and whether the value is reported or estimated.
+- Add a cost page with daily totals, date filtering, model filtering, and a toggle between dollars and tokens or media units.
+- Add a readable stacked bar chart with separate colors for replies, summaries, embeddings, transcription, images, documents, and video.
+- Show a detailed table beneath the chart so every total can be audited back to an operation.
+- Keep pricing data in a versioned application-controlled table and make unknown pricing visible instead of silently reporting zero.
+- Never include API keys, raw media, or sensitive prompt content in the usage ledger.
+
+### Phase 3.9
+
+Ralph loop for controlled development
+
+Status pending
+
+The Ralph loop is an iterative development pattern, commonly associated with the Ralph Wiggum technique. A durable task list defines the work. Each iteration selects a task, gives the agent the current repository and task state, runs the implementation and verification steps, records the result, and continues only when the stop conditions allow it. The loop is persistence around a testable task list, not a replacement for product planning or human review.
+
+For Wingman, use it first as a development and evaluation workflow rather than as a runtime bot feature.
+
+- Store a versioned task ledger with acceptance criteria, dependencies, status, attempts, and verification results.
+- Run one bounded task per iteration with repository checks, tests, and a clear token or time budget.
+- Preserve progress, failures, and decisions between iterations without injecting hidden context into user conversations.
+- Stop on repeated failures, unsafe file changes, missing credentials, failed tests, or tasks requiring human judgment.
+- Require human review before merging or deploying changes.
+- Add an evaluation suite for memory capture, multimodal understanding, planning actions, natural replies, cleanup, and cost accounting.
+- Revisit whether a runtime self-review loop is useful only after the development loop proves safe and measurable.
+
+### Phase 3.10
+
+Multimodal integration and release hardening
+
+Status pending
+
+- Test mixed messages containing captions, multiple images, documents, and video metadata.
+- Verify that multimodal turns still use relevant memories naturally and do not save every visual detail.
+- Verify that all temporary files are deleted on success, model failure, timeout, cancellation, and process restart.
+- Validate dashboard consistency, cost totals, diagnostics, privacy boundaries, and responsive layouts.
+- Update the README, architecture notes, security notes, release notes, and configuration examples for the final 3.x release.
+
 ## Cross-phase acceptance requirements
 
 - No private owner or relationship names appear in shipped defaults, prompts, fixtures, or examples.
@@ -236,3 +401,6 @@ Status complete
 - Model tools remain validated, audited, bounded, and ownership-checked.
 - The dashboard makes primary actions obvious without hiding detailed diagnostics.
 - Every phase has mocked tests for external API behavior and does not require live OpenAI credentials.
+- Multimodal inputs are bounded, traceable, and deleted after processing.
+- Cost totals identify reported versus estimated usage and can be reconciled to individual operations.
+- No autonomous development or runtime loop can bypass application validation, ownership checks, safety rules, or human review.

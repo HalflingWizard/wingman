@@ -104,6 +104,37 @@ class PendingState(Base):
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
 
 
+class ActionGroup(Base):
+    __tablename__ = "action_groups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    source_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ActionItem(Base):
+    __tablename__ = "action_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    group_id: Mapped[str] = mapped_column(ForeignKey("action_groups.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    action_key: Mapped[str] = mapped_column(String(100))
+    action_type: Mapped[str] = mapped_column(String(40))
+    statement: Mapped[str] = mapped_column(Text)
+    requires_confirmation: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class Memory(Base):
     __tablename__ = "memories"
 

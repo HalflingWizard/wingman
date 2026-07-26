@@ -22,6 +22,8 @@ def make_engine(settings: Settings) -> Engine:
 
 def initialize_database(settings: Settings) -> None:
     from wingman.models import (  # noqa: F401
+        ActionGroup,
+        ActionItem,
         AgentRun,
         Conversation,
         ConversationSummary,

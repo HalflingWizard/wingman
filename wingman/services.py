@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from wingman.models import (
+    ActionGroup,
+    ActionItem,
     AgentRun,
     Conversation,
     ConversationSummary,
@@ -667,6 +669,173 @@ def create_pending_state(
     session.commit()
     session.refresh(state)
     return state
+
+
+ACTION_TERMINAL_STATUSES = {
+    "completed",
+    "duplicate",
+    "needs_clarification",
+    "failed",
+    "dismissed",
+    "blocked",
+}
+
+
+def create_action_group(
+    session: Session,
+    user: User,
+    conversation: Conversation,
+    source_message_id: str | None = None,
+) -> ActionGroup:
+    group = ActionGroup(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        source_message_id=source_message_id,
+    )
+    session.add(group)
+    session.commit()
+    session.refresh(group)
+    return group
+
+
+def register_action_items(
+    session: Session,
+    user: User,
+    group: ActionGroup,
+    actions: list[dict[str, Any]],
+) -> list[ActionItem]:
+    existing = {
+        item.action_key: item
+        for item in session.scalars(select(ActionItem).where(ActionItem.group_id == group.id))
+    }
+    records: list[ActionItem] = []
+    for action in actions:
+        key = str(action["action_id"]).strip()
+        if not key or key in existing:
+            continue
+        record = ActionItem(
+            group_id=group.id,
+            user_id=user.id,
+            action_key=key,
+            action_type=str(action.get("action_type", "memory")),
+            statement=str(action.get("statement", "")).strip(),
+            requires_confirmation=bool(action.get("requires_confirmation", False)),
+            status=("awaiting_confirmation" if action.get("requires_confirmation") else "pending"),
+        )
+        session.add(record)
+        records.append(record)
+    group.updated_at = datetime.now(UTC)
+    session.commit()
+    for record in records:
+        session.refresh(record)
+    return records
+
+
+def get_open_action_group(
+    session: Session, user: User, conversation: Conversation
+) -> ActionGroup | None:
+    return session.scalar(
+        select(ActionGroup)
+        .where(
+            ActionGroup.user_id == user.id,
+            ActionGroup.conversation_id == conversation.id,
+            ActionGroup.status == "open",
+        )
+        .order_by(ActionGroup.updated_at.desc())
+    )
+
+
+def action_ledger(session: Session, user: User, conversation: Conversation) -> dict[str, Any]:
+    group = get_open_action_group(session, user, conversation)
+    if group is None:
+        return {"group_id": None, "items": [], "continue_required": False}
+    items = list(
+        session.scalars(
+            select(ActionItem)
+            .where(ActionItem.group_id == group.id, ActionItem.user_id == user.id)
+            .order_by(ActionItem.created_at)
+        )
+    )
+    return {
+        "group_id": group.id,
+        "items": [
+            {
+                "action_id": item.action_key,
+                "action_type": item.action_type,
+                "statement": item.statement,
+                "requires_confirmation": item.requires_confirmation,
+                "status": item.status,
+                "result": json.loads(item.result_json) if item.result_json else None,
+                "error": item.error,
+            }
+            for item in items
+        ],
+        "continue_required": any(item.status == "pending" for item in items),
+    }
+
+
+def mark_action_item(
+    session: Session,
+    user: User,
+    action_key: str,
+    status: str,
+    result: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> ActionItem | None:
+    item = session.scalar(
+        select(ActionItem).where(
+            ActionItem.user_id == user.id,
+            ActionItem.action_key == action_key,
+            ActionItem.status.not_in(ACTION_TERMINAL_STATUSES),
+        )
+    )
+    if item is None:
+        return None
+    item.status = status
+    item.result_json = json.dumps(result, sort_keys=True) if result is not None else None
+    item.error = error
+    item.updated_at = datetime.now(UTC)
+    group = session.get(ActionGroup, item.group_id)
+    session.flush()
+    if group is not None:
+        remaining = session.scalar(
+            select(ActionItem.id).where(
+                ActionItem.group_id == group.id,
+                ~ActionItem.status.in_(ACTION_TERMINAL_STATUSES),
+            )
+        )
+        if remaining is None:
+            group.status = "completed"
+        group.updated_at = datetime.now(UTC)
+    session.commit()
+    return item
+
+
+def confirm_action_items(
+    session: Session, user: User, conversation: Conversation, action_keys: list[str]
+) -> dict[str, Any]:
+    group = get_open_action_group(session, user, conversation)
+    if group is None:
+        return {"confirmed": [], "missing": action_keys}
+    query = select(ActionItem).where(
+        ActionItem.group_id == group.id,
+        ActionItem.user_id == user.id,
+        ActionItem.status == "awaiting_confirmation",
+    )
+    if action_keys:
+        query = query.where(ActionItem.action_key.in_(action_keys))
+    items = list(session.scalars(query))
+    for item in items:
+        item.requires_confirmation = False
+        item.status = "pending"
+        item.updated_at = datetime.now(UTC)
+    session.commit()
+    found = {item.action_key for item in items}
+    return {
+        "confirmed": [item.action_key for item in items],
+        "missing": [key for key in action_keys if key not in found],
+        "items": [item.statement for item in items],
+    }
 
 
 def record_tool_execution(

@@ -36,6 +36,7 @@ from wingman.retrieval import (
     retrieve_memories,
 )
 from wingman.services import (
+    action_ledger,
     add_message,
     create_agent_run,
     create_memory,
@@ -467,6 +468,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             conversation = get_or_create_conversation(session, user)
             summary = get_or_create_summary(session, conversation)
             pending_state = get_open_pending_state(session, user, conversation)
+            current_action_ledger = action_ledger(session, user, conversation)
             built_context = build_context(
                 user,
                 conversation,
@@ -476,6 +478,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 primary_person_name=settings.primary_person_name,
                 summary=summary,
                 pending_state=pending_state,
+                action_ledger=current_action_ledger,
                 places=places,
                 ideas=ideas,
                 events=events,

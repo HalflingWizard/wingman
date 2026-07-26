@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 from wingman.models import Conversation, User
 from wingman.retrieval import retrieve_memories
 from wingman.services import (
+    action_ledger,
     add_memory_note,
+    confirm_action_items,
     confirm_memory,
+    create_action_group,
     create_event,
     create_memory,
     create_pending_state,
@@ -25,6 +28,7 @@ from wingman.services import (
     find_place_by_name,
     find_reminder,
     find_saved_idea_by_title,
+    get_open_action_group,
     get_open_pending_state,
     get_owned_memory,
     list_events,
@@ -32,12 +36,15 @@ from wingman.services import (
     list_places,
     list_reminders,
     list_saved_ideas,
+    mark_action_item,
     record_tool_execution,
+    register_action_items,
     update_memory,
 )
 
 
 class CreateMemoryInput(BaseModel):
+    action_id: str | None = None
     statement: str = Field(min_length=1, max_length=4000)
     memory_type: str = Field(default="fact", max_length=40)
     status: str = Field(default="confirmed", max_length=20)
@@ -67,6 +74,7 @@ class SearchMemoriesInput(BaseModel):
 
 
 class ProposeMemoryInput(BaseModel):
+    action_id: str | None = None
     statement: str = Field(min_length=1, max_length=4000)
     memory_type: str = Field(default="observation", max_length=40)
     status: str = Field(default="inferred", pattern="^(observed|inferred|uncertain)$")
@@ -80,6 +88,7 @@ class SearchPlanningInput(BaseModel):
 
 
 class CreatePlaceInput(BaseModel):
+    action_id: str | None = None
     name: str = Field(min_length=1, max_length=200)
     address: str = Field(default="", max_length=500)
     city: str = Field(default="", max_length=120)
@@ -89,12 +98,14 @@ class CreatePlaceInput(BaseModel):
 
 
 class CreateIdeaInput(BaseModel):
+    action_id: str | None = None
     title: str = Field(min_length=1, max_length=200)
     reason: str = Field(default="", max_length=4000)
     place_id: str | None = None
 
 
 class CreateEventInput(BaseModel):
+    action_id: str | None = None
     title: str = Field(min_length=1, max_length=200)
     start_at: str = Field(min_length=1, max_length=80)
     event_type: str = Field(default="event", max_length=40)
@@ -104,6 +115,7 @@ class CreateEventInput(BaseModel):
 
 
 class CreateReminderInput(BaseModel):
+    action_id: str | None = None
     title: str = Field(min_length=1, max_length=200)
     scheduled_at: str = Field(min_length=1, max_length=80)
     timezone: str = Field(default="UTC", max_length=80)
@@ -127,12 +139,79 @@ class MemoryToolExecutor:
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
+            if name == "__action_ledger__":
+                if self.conversation is None:
+                    return {"group_id": None, "items": [], "continue_required": False}
+                return action_ledger(self.session, self.user, self.conversation)
+            if name == "__mark_action__":
+                action_id = str(arguments.get("action_id", ""))
+                status = str(arguments.get("status", "failed"))
+                mark_action_item(
+                    self.session,
+                    self.user,
+                    action_id,
+                    status,
+                    result=arguments.get("result"),
+                    error=arguments.get("error"),
+                )
+                return {"action_id": action_id, "status": status}
+            if name == "register_actions":
+                if self.conversation is None:
+                    raise ValueError("A conversation is required to register actions")
+                actions = arguments.get("actions")
+                if not isinstance(actions, list) or not actions:
+                    raise ValueError("At least one action is required")
+                group = get_open_action_group(self.session, self.user, self.conversation)
+                if group is None or group.source_message_id != self.source_message_id:
+                    group = create_action_group(
+                        self.session, self.user, self.conversation, self.source_message_id
+                    )
+                action_records = register_action_items(self.session, self.user, group, actions)
+                output: dict[str, Any] = {
+                    "group_id": group.id,
+                    "actions": [
+                        {
+                            "action_id": item.action_key,
+                            "action_type": item.action_type,
+                            "statement": item.statement,
+                            "status": item.status,
+                        }
+                        for item in action_records
+                    ],
+                }
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
+            if name == "confirm_actions":
+                if self.conversation is None:
+                    raise ValueError("A conversation is required to confirm actions")
+                action_ids = arguments.get("action_ids", [])
+                if not isinstance(action_ids, list):
+                    raise ValueError("action_ids must be a list")
+                output = confirm_action_items(
+                    self.session, self.user, self.conversation, [str(item) for item in action_ids]
+                )
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
             if name == "search_memories":
                 search_data = SearchMemoriesInput.model_validate(arguments)
                 matches = retrieve_memories(
                     self.session, self.user, search_data.query, limit=search_data.top_k
                 )
-                output: dict[str, Any] = {
+                output = {
                     "memories": [
                         {
                             "memory_id": result.memory.id,
@@ -235,7 +314,11 @@ class MemoryToolExecutor:
                         "name": existing_place.name,
                     }
                 else:
-                    place = create_place(self.session, self.user, **place_data.model_dump())
+                    place = create_place(
+                        self.session,
+                        self.user,
+                        **place_data.model_dump(exclude={"action_id"}),
+                    )
                     output = {
                         "created": True,
                         "place_id": place.id,
@@ -263,7 +346,11 @@ class MemoryToolExecutor:
                         "title": existing_idea.title,
                     }
                 else:
-                    idea = create_saved_idea(self.session, self.user, **idea_data.model_dump())
+                    idea = create_saved_idea(
+                        self.session,
+                        self.user,
+                        **idea_data.model_dump(exclude={"action_id"}),
+                    )
                     output = {"created": True, "idea_id": idea.id, "title": idea.title}
                 record_tool_execution(
                     self.session,
@@ -350,7 +437,11 @@ class MemoryToolExecutor:
                 return output
             if name == "create_memory":
                 create_data = CreateMemoryInput.model_validate(arguments)
-                memory = create_memory(self.session, self.user, **create_data.model_dump())
+                memory = create_memory(
+                    self.session,
+                    self.user,
+                    **create_data.model_dump(exclude={"action_id"}),
+                )
                 if self.conversation is not None:
                     pending_memory = get_open_pending_state(
                         self.session, self.user, self.conversation

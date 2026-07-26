@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from wingman.models import (
@@ -42,6 +43,7 @@ def build_context(
     ideas: list[SavedIdea] | None = None,
     events: list[Event] | None = None,
     reminders: list[Reminder] | None = None,
+    action_ledger: dict[str, Any] | None = None,
     prompt_text: str = DEFAULT_PROMPT,
     max_messages: int = 20,
     max_memories: int = 8,
@@ -126,6 +128,16 @@ def build_context(
                 f"- {reminder.title} at {reminder.scheduled_at.isoformat()}"
                 for reminder in reminders
             )
+        )
+    if action_ledger and action_ledger.get("items"):
+        dynamic_parts.append(
+            "Action ledger from the owner's current multi-action request:\n"
+            + "\n".join(
+                f"- {item.get('action_id')}: {item.get('statement')} ({item.get('status')})"
+                for item in action_ledger["items"]
+                if isinstance(item, dict)
+            )
+            + "\nUse this only to finish or clarify the owner's requested actions."
         )
     dynamic = "\n\n".join(dynamic_parts)
     messages = [(message.sender, message.text) for message in conversation.messages[-max_messages:]]

@@ -17,6 +17,61 @@ ToolExecutor = Callable[[str, dict[str, Any]], dict[str, Any]]
 MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
+        "name": "register_actions",
+        "description": (
+            "Register every distinct action requested in the current message before executing "
+            "multiple memory or planning writes. Use one item per requested detail."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "action_id": {"type": "string", "minLength": 1, "maxLength": 100},
+                            "action_type": {"type": "string", "maxLength": 40},
+                            "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
+                            "requires_confirmation": {"type": "boolean"},
+                        },
+                        "required": [
+                            "action_id",
+                            "action_type",
+                            "statement",
+                            "requires_confirmation",
+                        ],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["actions"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "confirm_actions",
+        "description": "Confirm pending action items so the application can complete them.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action_ids": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {"type": "string", "maxLength": 100},
+                }
+            },
+            "required": ["action_ids"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
         "name": "search_memories",
         "description": "Search the owner's saved memories and notes before creating a duplicate.",
         "parameters": {
@@ -41,6 +96,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
                 "memory_type": {"type": "string"},
                 "status": {"type": "string", "enum": ["observed", "inferred", "uncertain"]},
@@ -48,6 +104,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 "importance": {"type": "integer", "minimum": 1, "maximum": 5},
             },
             "required": [
+                "action_id",
                 "statement",
                 "memory_type",
                 "status",
@@ -65,6 +122,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
                 "memory_type": {"type": "string"},
                 "status": {
@@ -75,6 +133,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 "importance": {"type": "integer", "minimum": 1, "maximum": 5},
             },
             "required": [
+                "action_id",
                 "statement",
                 "memory_type",
                 "status",
@@ -177,6 +236,7 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "name": {"type": "string", "minLength": 1, "maxLength": 200},
                 "address": {"type": "string", "maxLength": 500},
                 "city": {"type": "string", "maxLength": 120},
@@ -184,7 +244,15 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
                 "place_type": {"type": "string", "maxLength": 40},
                 "atmosphere_tags": {"type": "string", "maxLength": 500},
             },
-            "required": ["name", "address", "city", "description", "place_type", "atmosphere_tags"],
+            "required": [
+                "action_id",
+                "name",
+                "address",
+                "city",
+                "description",
+                "place_type",
+                "atmosphere_tags",
+            ],
             "additionalProperties": False,
         },
         "strict": True,
@@ -196,11 +264,12 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "reason": {"type": "string", "maxLength": 4000},
                 "place_id": {"type": ["string", "null"]},
             },
-            "required": ["title", "reason", "place_id"],
+            "required": ["action_id", "title", "reason", "place_id"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -212,6 +281,7 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "start_at": {"type": "string", "minLength": 1, "maxLength": 80},
                 "event_type": {"type": "string", "maxLength": 40},
@@ -219,7 +289,15 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
                 "description": {"type": "string", "maxLength": 4000},
                 "place_id": {"type": ["string", "null"]},
             },
-            "required": ["title", "start_at", "event_type", "timezone", "description", "place_id"],
+            "required": [
+                "action_id",
+                "title",
+                "start_at",
+                "event_type",
+                "timezone",
+                "description",
+                "place_id",
+            ],
             "additionalProperties": False,
         },
         "strict": True,
@@ -231,19 +309,20 @@ PLANNING_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
+                "action_id": {"type": ["string", "null"]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "scheduled_at": {"type": "string", "minLength": 1, "maxLength": 80},
                 "timezone": {"type": "string", "maxLength": 80},
                 "event_id": {"type": ["string", "null"]},
             },
-            "required": ["title", "scheduled_at", "timezone", "event_id"],
+            "required": ["action_id", "title", "scheduled_at", "timezone", "event_id"],
             "additionalProperties": False,
         },
         "strict": True,
     },
 ]
 
-AVAILABLE_TOOLS = MEMORY_TOOLS + PLANNING_TOOLS
+AVAILABLE_TOOLS = MEMORY_TOOLS[2:] + MEMORY_TOOLS[:2] + PLANNING_TOOLS
 
 
 class ModelClient:
@@ -289,6 +368,13 @@ class ModelClient:
             "When one message contains several distinct durable details, handle each safe "
             "detail and use multiple tool calls when appropriate. Do not stop after the "
             "first valid memory action. "
+            "When two or more requested saves or planning actions are present, first use "
+            "register_actions with every distinct action and a stable action_id. Then execute "
+            "each registered action using its action_id. If an action ledger says items remain "
+            "pending, continue tool work until all items are completed or need clarification. "
+            "When the owner clearly agrees to a group of pending proposals, use confirm_actions "
+            "with all matching action IDs, then continue saving every confirmed item. Never ask "
+            "the owner to repeat a list that is already in the action ledger. "
             "Use add_memory_note when new evidence supports an existing memory. Use "
             "propose_memory for a personal observation or preference that should be saved "
             "only after the owner agrees. If there is an open proposal, use the exact proposed "
@@ -329,26 +415,84 @@ class ModelClient:
         self.last_request_snapshot = request
         response = await self.client.responses.create(**request)
         if tool_executor is not None:
-            for _ in range(4):
+            action_tracking_active = False
+            for _ in range(8):
                 calls = [
                     item
                     for item in getattr(response, "output", [])
                     if getattr(item, "type", None) == "function_call"
                 ]
                 if not calls:
-                    break
-                follow_up: list[Any] = list(response.output)
+                    if not action_tracking_active:
+                        break
+                    try:
+                        ledger_result = tool_executor("__action_ledger__", {})
+                        ledger = (
+                            ledger_result
+                            if isinstance(ledger_result, dict)
+                            and "continue_required" in ledger_result
+                            else {"continue_required": False}
+                        )
+                    except Exception:
+                        ledger = {"continue_required": False}
+                    if not ledger.get("continue_required"):
+                        break
+                    follow_up = list(response.output)
+                    follow_up.append(
+                        {
+                            "role": "developer",
+                            "content": (
+                                "The action ledger still has pending requested actions. "
+                                "Continue using the available tools until every pending action "
+                                "is completed or needs clarification. Do not ask the owner to "
+                                "repeat the same request. Ledger:\n"
+                                + json.dumps(ledger, sort_keys=True)
+                            ),
+                        }
+                    )
+                    response = await self.client.responses.create(
+                        **request | {"input": cast(Any, follow_up)}
+                    )
+                    continue
+                follow_up = list(response.output)
                 for call in calls:
                     arguments: dict[str, Any] = {}
+                    action_id: str | None = None
                     try:
                         parsed = json.loads(call.arguments)
                         if not isinstance(parsed, dict):
                             raise ValueError("Tool arguments must be a JSON object")
                         arguments = parsed
+                        raw_action_id = arguments.get("action_id")
+                        action_id = str(raw_action_id) if raw_action_id else None
+                        if call.name == "register_actions" or action_id:
+                            action_tracking_active = True
                         result = tool_executor(call.name, arguments)
                         output = {"ok": True, "result": result}
                     except Exception as exc:
                         output = {"ok": False, "error": str(exc)}
+                    if action_id:
+                        action_status = "failed" if not output["ok"] else "completed"
+                        result_data = output.get("result")
+                        if isinstance(result_data, dict):
+                            if result_data.get("duplicate"):
+                                action_status = "duplicate"
+                            elif result_data.get("status") == "awaiting_confirmation":
+                                action_status = "awaiting_confirmation"
+                            elif result_data.get("needs_clarification"):
+                                action_status = "needs_clarification"
+                        try:
+                            tool_executor(
+                                "__mark_action__",
+                                {
+                                    "action_id": action_id,
+                                    "status": action_status,
+                                    "result": output.get("result"),
+                                    "error": output.get("error"),
+                                },
+                            )
+                        except Exception:
+                            pass
                     self.last_tool_trace.append(
                         {"name": call.name, "arguments": arguments, "output": output}
                     )
