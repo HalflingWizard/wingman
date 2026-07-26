@@ -15,6 +15,7 @@ def test_context_page_edits_static_prompt(tmp_path):
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         telegram_owner_id=42,
         prompt_file=str(tmp_path / "wingman.md"),
+        data_dir=str(tmp_path / "data"),
     )
     initialize_database(settings)
     client = TestClient(create_app(settings))

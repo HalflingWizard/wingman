@@ -12,7 +12,7 @@ from html import escape
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
-from zoneinfo import available_timezones
+from zoneinfo import ZoneInfo, available_timezones
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
@@ -22,8 +22,10 @@ from sqlalchemy.orm import Session
 
 from wingman import __version__
 from wingman.config import Settings, get_settings, save_runtime_settings
+from wingman.context_builder import build_context
 from wingman.database import make_engine, session_factory
 from wingman.lifecycle import is_paused, schedule_restart, set_paused
+from wingman.model_client import AVAILABLE_TOOLS, build_agent_instructions
 from wingman.models import (
     AgentRun,
     Conversation,
@@ -33,7 +35,13 @@ from wingman.models import (
     ToolExecution,
     User,
 )
-from wingman.prompting import load_prompt, save_prompt
+from wingman.prompting import (
+    PROMPT_SECTION_LABELS,
+    load_prompt,
+    load_prompt_configuration,
+    load_prompt_sections,
+    save_prompt_sections,
+)
 from wingman.runtime_log import recent_runtime_output
 from wingman.services import (
     add_memory_note,
@@ -45,6 +53,7 @@ from wingman.services import (
     create_saved_idea,
     delete_memory,
     delete_memory_note,
+    get_or_create_conversation,
     list_events,
     list_memories,
     list_memory_notes,
@@ -568,29 +577,126 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/context", response_class=HTMLResponse)
     def context_page() -> str:
-        prompt = escape(load_prompt(active_settings))
+        configuration = load_prompt_configuration(active_settings)
+        sections = load_prompt_sections(active_settings)
+        try:
+            current_time = datetime.now(ZoneInfo(active_settings.timezone)).isoformat(
+                timespec="seconds"
+            )
+        except Exception:
+            current_time = datetime.now().astimezone().isoformat(timespec="seconds")
+        editable_fields = []
+        for key, label in PROMPT_SECTION_LABELS.items():
+            required_attribute = "" if key == "custom_instructions" else " required"
+            editable_fields.append(
+                "<section class='panel'><div class='panel-header'><div>"
+                f"<h2 class='section-title'><i class='fa-solid fa-pen-to-square'></i> {escape(label)}</h2>"
+                "<p class='muted'>This text is inserted into future agent instructions.</p></div></div>"
+                f"<textarea name='{escape(key)}' rows='7' maxlength='6000' style='width:100%'"
+                f"{required_attribute}>{escape(sections[key])}</textarea></section>"
+            )
+        read_only = (
+            f"<div class='settings-grid'><label>Owner name<input value='{escape(active_settings.user_name, quote=True)}' disabled></label>"
+            f"<label>Primary person name<input value='{escape(active_settings.primary_person_name, quote=True)}' disabled></label>"
+            f"<label>Timezone<input value='{escape(active_settings.timezone, quote=True)}' disabled></label>"
+            f"<label>Current local date and time<input value='{escape(current_time, quote=True)}' disabled></label>"
+            f"<label>Active model<input value='{escape(active_settings.openai_main_model, quote=True)}' disabled></label></div>"
+        )
+        system_rows = (
+            f"<li>Available tools {escape(', '.join(tool['name'] for tool in AVAILABLE_TOOLS))}</li>"
+            "<li>Maximum tool rounds 8</li><li>Parallel tool calls enabled</li>"
+            "<li>Duplicate-write protection enabled</li><li>Telegram cards and deletion controls enabled</li>"
+            "<li>Supported planning types places, ideas, events, and reminders</li>"
+            "<li>Temporary attachment inputs are deleted after processing</li>"
+            f"<li>Active prompt version {escape(str(configuration.get('version_number', 0)))}</li>"
+        )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Context design</p><h1>Context</h1>"
-            "<p class='muted'>Control the editable conversation guidance and understand what changes each turn.</p></div></header>"
-            "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-pen-to-square'></i> Static context</h2>"
-            "<p class='muted'>This guidance is included on every model request. Application safety and tool rules remain protected in code.</p></div>"
-            "<i class='fa-solid fa-file-pen'></i></div>"
-            "<form method='post' action='/context'><textarea name='prompt' rows='18' maxlength='12000' style='width:100%' required>"
-            f"{prompt}</textarea><p><button><i class='fa-solid fa-floppy-disk'></i> Save static context</button></p></form></section>"
+            "<p class='muted'>Edit the static context sections here. Protected application rules remain in code.</p></div>"
+            f"<div class='stack'><span class='badge'>Prompt version {escape(str(configuration.get('version_number', 0)))}</span>"
+            "<a class='button button-secondary' href='/context/preview'><i class='fa-solid fa-eye'></i> Preview final agent context</a></div></header>"
+            "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-user'></i> Personal context</h2>"
+            "<p class='muted'>These values are resolved from current runtime settings and are read-only here.</p></div></div>"
+            f"{read_only}</section>"
+            "<form method='post' action='/context'>"
+            + "<section class='panel'><h2 class='section-title'>Static context sections</h2>"
+            + "<p class='muted'>These editable sections are the owner-controlled part of the final prompt.</p></section>"
+            + "".join(editable_fields)
+            + "<p><button><i class='fa-solid fa-floppy-disk'></i> Save prompt configuration</button></p></form>"
+            + "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-shield-halved'></i> Read-only system behavior</h2>"
+            "<p class='muted'>These capabilities are controlled by the application and cannot be changed in the prompt editor.</p></div></div>"
+            f"<ul>{system_rows}</ul></section>"
             "<section class='panel'><div class='panel-header'><div><h2 class='section-title'><i class='fa-solid fa-layer-group'></i> Dynamic context</h2>"
-            "<p class='muted'>This is assembled for each message based on the current conversation.</p></div>"
-            "<i class='fa-solid fa-arrows-rotate'></i></div>"
-            "<ul><li>Relevant saved memories and their notes</li>"
-            "<li>Recent conversation messages</li><li>Conversation summaries when available</li>"
-            "<li>Open memory proposals awaiting your answer</li>"
-            "<li>Planning records when they are relevant to the conversation</li></ul>"
-            "<p class='muted'>The system keeps this context within the configured token budget and does not send this dashboard explanation to the model.</p></section>"
+            "<p class='muted'>This is assembled for each request from current conversation state. It is not stored in the editable prompt.</p></div></div>"
+            "<ul><li>Recent messages and rolling summaries</li><li>Relevant records returned by search tools</li><li>Pending conversational state</li><li>Telegram reply and attachment context when available</li></ul></section>"
         )
         return page_shell("Context", body, "context")
 
+    @app.get("/context/preview", response_class=HTMLResponse)
+    def context_preview() -> str:
+        try:
+            current_time = datetime.now(ZoneInfo(active_settings.timezone)).isoformat(
+                timespec="seconds"
+            )
+        except Exception:
+            current_time = datetime.now().astimezone().isoformat(timespec="seconds")
+        with session_factory(active_settings)() as session:
+            user = web_user(session)
+            conversation = get_or_create_conversation(session, user)
+            built = build_context(
+                user,
+                conversation,
+                "",
+                [],
+                active_settings.timezone,
+                primary_person_name=active_settings.primary_person_name,
+                prompt_text=load_prompt(active_settings),
+                max_messages=active_settings.recent_message_limit,
+                token_budget=active_settings.context_token_budget,
+            )
+        final_prompt = build_agent_instructions(built.static_context)
+        combined = (
+            f"Runtime preview time {current_time}\n\n"
+            f"{final_prompt}\n\n"
+            "DYNAMIC CONTEXT SENT WITH THIS REQUEST\n"
+            f"{built.dynamic_context}"
+        )
+        body = (
+            "<header class='page-header'><div><p class='eyebrow'>Context preview</p><h1>Final agent context</h1>"
+            "<p class='muted'>This preview uses the same context builder and instruction builder as the agent request.</p></div>"
+            "<a class='button button-secondary' href='/context'><i class='fa-solid fa-arrow-left'></i> Back to context</a></header>"
+            + code_panel("Combined context preview", combined, 720)
+        )
+        return page_shell("Context preview", body, "context")
+
     @app.post("/context", response_class=HTMLResponse)
-    def update_context(prompt: str = Form(...)) -> str:
-        save_prompt(active_settings, prompt)
+    def update_context(
+        prompt: str | None = Form(default=None),
+        personality_safety: str | None = Form(default=None),
+        memory_planning: str | None = Form(default=None),
+        tool_orchestration: str | None = Form(default=None),
+        attachment_capabilities: str | None = Form(default=None),
+        custom_instructions: str | None = Form(default=None),
+    ) -> str:
+        if prompt is not None and all(
+            value is None
+            for value in (
+                personality_safety,
+                memory_planning,
+                tool_orchestration,
+                attachment_capabilities,
+                custom_instructions,
+            )
+        ):
+            personality_safety = prompt
+        sections = {
+            "personality_safety": personality_safety or "",
+            "memory_planning": memory_planning or "",
+            "tool_orchestration": tool_orchestration or "",
+            "attachment_capabilities": attachment_capabilities or "",
+            "custom_instructions": custom_instructions or "",
+        }
+        save_prompt_sections(active_settings, sections)
         return context_page()
 
     @app.get("/memories", response_class=HTMLResponse)

@@ -1,6 +1,6 @@
 # Architecture
 
-Wingman 5.4.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
+Wingman 5.5.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
 The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
@@ -44,7 +44,7 @@ The model can use validated planning tools to search and create places, saved id
 
 The dashboard is server-rendered by FastAPI. A shared responsive layout provides navigation, Font Awesome icons, summary cards, status badges, forms, and mobile spacing. Long prompts, request payloads, responses, and retrieval JSON use fixed-height, scrollable, highlighted panels with copy buttons.
 
-The Context page edits static guidance and explains dynamic context at a high level. The Settings page persists selected runtime settings in the local `.env` file. The System page controls bot pause or resume, database backups, versioned JSON export and import, and safe Git updates.
+The Context page edits versioned prompt sections, shows read-only runtime context, and previews the combined instructions and dynamic context used by the agent. Prompt configuration is loaded from disk on every new request so dashboard changes apply without a restart. The Settings page persists selected runtime settings in the local `.env` file. The System page controls bot pause or resume, database backups, versioned JSON export and import, and safe Git updates.
 
 Telegram voice messages are downloaded into memory, sent to the configured Audio Transcriptions model, and then released. Audio is not written to the database or retained as a project file. Supported documents are sent as temporary file inputs. Supported videos are downloaded temporarily, split into audio and five sampled frames, then deleted after processing. Only attachment metadata is persisted.
 

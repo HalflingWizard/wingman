@@ -1,6 +1,14 @@
 # Implementation plan
 
-Wingman 5.4.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.5.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.5 completed
+
+- Replaced the single context textarea with organized editable prompt sections.
+- Added active prompt configuration persistence with version ID, version number, timestamp, active status, and updater metadata.
+- Added read-only personal context and system capability information to the dashboard.
+- Added a combined prompt preview using the same context and instruction builders as real agent requests.
+- Reloaded the active prompt configuration from disk for every new request.
 
 ## Phase 5.4 completed
 
@@ -599,7 +607,7 @@ Acceptance requirements
 
 Dashboard-owned prompt and context architecture
 
-Status planned
+Status complete
 
 - Replace the current static and dynamic context layout with organized editable sections.
 - Add Personality and safety, Memory and planning behavior, Tool orchestration, and Attachment capabilities sections.
