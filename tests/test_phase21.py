@@ -28,14 +28,34 @@ def test_model_request_allows_multiple_tool_calls():
                     output=[
                         SimpleNamespace(
                             type="function_call",
-                            name="search_memories",
-                            arguments=json.dumps({"query": "jewelry", "top_k": 5}),
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "jewelry",
+                                    "categories": ["memory"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
                             call_id="call-1",
                         ),
                         SimpleNamespace(
                             type="function_call",
-                            name="search_memories",
-                            arguments=json.dumps({"query": "restaurants", "top_k": 5}),
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "restaurants",
+                                    "categories": ["place"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
                             call_id="call-2",
                         ),
                     ],
@@ -66,7 +86,10 @@ def test_model_request_allows_multiple_tool_calls():
     assert answer == "Done."
     assert len(executed) == 2
     assert calls[0]["parallel_tool_calls"] is True
-    assert calls[0]["tool_choice"] == "auto"
+    assert calls[0]["tool_choice"] == {
+        "type": "function",
+        "name": "search_saved_context",
+    }
 
 
 def test_memory_search_stays_automatic_through_tool_loop():
@@ -82,8 +105,18 @@ def test_memory_search_stays_automatic_through_tool_loop():
                     output=[
                         SimpleNamespace(
                             type="function_call",
-                            name="search_memories",
-                            arguments=json.dumps({"query": "Chloe", "top_k": 5}),
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "Chloe",
+                                    "categories": ["memory"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
                             call_id="call-search",
                         )
                     ],
@@ -107,7 +140,10 @@ def test_memory_search_stays_automatic_through_tool_loop():
     )
 
     assert answer == "I found the relevant saved detail."
-    assert calls[0]["tool_choice"] == "auto"
+    assert calls[0]["tool_choice"] == {
+        "type": "function",
+        "name": "search_saved_context",
+    }
     assert calls[1]["tool_choice"] == "auto"
 
 

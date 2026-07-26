@@ -11,6 +11,15 @@ from sqlalchemy.orm import Session
 
 from wingman.models import Conversation, Place, User
 from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
+from wingman.saved_context import (
+    SAVED_CATEGORIES,
+    SavedCategory,
+    log_saved_context_search,
+    result_payload,
+    saved_documents,
+    search_saved_context,
+    set_saved_document_embedding,
+)
 from wingman.services import (
     action_ledger,
     add_memory_note,
@@ -103,6 +112,18 @@ class SearchPlanningInput(BaseModel):
     date_to: str | None = Field(default=None, max_length=80)
 
 
+class SearchSavedContextInput(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    categories: list[Literal["memory", "place", "idea", "event", "reminder"]] = Field(
+        default_factory=list, max_length=5
+    )
+    top_k: int = Field(default=8, ge=1, le=20)
+    mode: Literal["search", "list"] = "search"
+    city: str | None = Field(default=None, max_length=120)
+    date_from: str | None = Field(default=None, max_length=80)
+    date_to: str | None = Field(default=None, max_length=80)
+
+
 class UpdatePlanningItemInput(BaseModel):
     item_type: Literal["place", "idea", "event", "reminder"]
     item_id: str = Field(min_length=1, max_length=36)
@@ -163,6 +184,44 @@ class MemoryToolExecutor:
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
+            if name == "__search_documents__":
+                corpus_categories = [
+                    item for item in arguments.get("categories", []) if item in SAVED_CATEGORIES
+                ]
+                return {
+                    "documents": [
+                        {
+                            "category": document.category,
+                            "record_id": document.record_id,
+                            "text": document.text,
+                        }
+                        for document in saved_documents(
+                            self.session,
+                            self.user,
+                            corpus_categories,
+                        )
+                        if not document.embedding_json
+                    ]
+                }
+            if name == "__set_search_embeddings__":
+                for item in arguments.get("items", []):
+                    category = item.get("category")
+                    record_id = item.get("record_id")
+                    vector = item.get("vector")
+                    if (
+                        category not in SAVED_CATEGORIES
+                        or not isinstance(record_id, str)
+                        or not isinstance(vector, list)
+                    ):
+                        raise ValueError("Invalid saved-context embedding")
+                    set_saved_document_embedding(
+                        self.session,
+                        self.user,
+                        category,
+                        record_id,
+                        vector,
+                    )
+                return {"updated": len(arguments.get("items", []))}
             if name == "__action_ledger__":
                 if self.conversation is None:
                     return {"group_id": None, "items": [], "continue_required": False}
@@ -221,6 +280,60 @@ class MemoryToolExecutor:
                 output = confirm_action_items(
                     self.session, self.user, self.conversation, [str(item) for item in action_ids]
                 )
+                record_tool_execution(
+                    self.session,
+                    self.user,
+                    name,
+                    arguments,
+                    output_data=output,
+                    agent_run_id=self.agent_run_id,
+                )
+                return output
+            if name == "search_saved_context":
+                query_vector = arguments.pop("_query_embedding", None)
+                if not isinstance(query_vector, list):
+                    query_vector = None
+                saved_search_data = SearchSavedContextInput.model_validate(arguments)
+                date_from, date_to = resolve_date_range(
+                    saved_search_data.query,
+                    self.timezone,
+                    saved_search_data.date_from,
+                    saved_search_data.date_to,
+                )
+                saved_categories: list[SavedCategory] = list(saved_search_data.categories)
+                selected, ranked = search_saved_context(
+                    self.session,
+                    self.user,
+                    saved_search_data.query,
+                    saved_categories,
+                    saved_search_data.top_k,
+                    query_vector=query_vector,
+                    list_mode=saved_search_data.mode == "list",
+                    date_from=date_from,
+                    date_to=date_to,
+                    city=saved_search_data.city,
+                )
+                filters = {
+                    "city": saved_search_data.city,
+                    "date_from": date_from.isoformat() if date_from else None,
+                    "date_to": date_to.isoformat() if date_to else None,
+                }
+                log_saved_context_search(
+                    self.session,
+                    self.user,
+                    self.conversation,
+                    saved_search_data.query,
+                    saved_categories,
+                    saved_search_data.mode == "list",
+                    ranked,
+                    selected,
+                    filters,
+                )
+                output = {
+                    "records": [result_payload(item) for item in selected],
+                    "searched_categories": saved_categories,
+                    "mode": saved_search_data.mode,
+                }
                 record_tool_execution(
                     self.session,
                     self.user,

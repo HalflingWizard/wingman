@@ -71,7 +71,7 @@ def _stem(word: str) -> str:
     return word
 
 
-def _words(text: str) -> set[str]:
+def tokenize(text: str) -> set[str]:
     words = set()
     for raw_word in WORD_RE.findall(text.lower()):
         if raw_word in STOP_WORDS:
@@ -81,7 +81,7 @@ def _words(text: str) -> set[str]:
     return words
 
 
-def _cosine(left: list[float], right: list[float]) -> float:
+def cosine_similarity(left: list[float], right: list[float]) -> float:
     if not left or not right or len(left) != len(right):
         return 0.0
     numerator = sum(a * b for a, b in zip(left, right, strict=True))
@@ -96,7 +96,7 @@ def _semantic_similarity(memory: Memory, query_vector: list[float] | None) -> fl
     if query_vector is None or not memory.embedding_json:
         return 0.0
     try:
-        return _cosine(json.loads(memory.embedding_json), query_vector)
+        return cosine_similarity(json.loads(memory.embedding_json), query_vector)
     except (TypeError, ValueError, json.JSONDecodeError):
         return 0.0
 
@@ -110,13 +110,13 @@ def retrieve_memories(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
 ) -> list[RetrievalResult]:
-    query_words = _words(query)
+    query_words = tokenize(query)
     results: list[RetrievalResult] = []
     now = datetime.now(UTC)
     for memory in list_memories(session, user):
         if not within_range(memory.created_at, date_from, date_to):
             continue
-        memory_words = _words(f"{memory.statement} {memory.embedding_text or ''}")
+        memory_words = tokenize(f"{memory.statement} {memory.embedding_text or ''}")
         notes = tuple(
             session.scalars(
                 select(MemoryNote)
@@ -165,7 +165,7 @@ def retrieval_query(
 ) -> dict[str, object]:
     return {
         "semantic_query": query,
-        "keywords": sorted(_words(query)),
+        "keywords": sorted(tokenize(query)),
         "user_id": user.id,
         "filters": {
             "status": ["confirmed", "observed", "inferred", "uncertain"],
@@ -223,12 +223,15 @@ def retrieval_context_usage(
     answer: str,
     tool_trace: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    answer_words = _words(answer)
+    answer_words = tokenize(answer)
     retrieved_ids = [result.memory.id for result in results]
     statements = {result.memory.id: result.memory.statement for result in results}
+    retrieved_records: list[dict[str, str]] = [
+        {"category": "memory", "record_id": result.memory.id} for result in results
+    ]
     if tool_trace:
         for trace in tool_trace:
-            if trace.get("name") != "search_memories":
+            if trace.get("name") not in {"search_memories", "search_saved_context"}:
                 continue
             output = trace.get("output")
             if not isinstance(output, dict) or not output.get("ok"):
@@ -236,26 +239,38 @@ def retrieval_context_usage(
             result = output.get("result")
             if not isinstance(result, dict):
                 continue
-            memories = result.get("memories")
-            if not isinstance(memories, list):
+            records = (
+                result.get("memories")
+                if trace.get("name") == "search_memories"
+                else result.get("records")
+            )
+            if not isinstance(records, list):
                 continue
-            for memory in memories:
-                if not isinstance(memory, dict):
+            for record in records:
+                if not isinstance(record, dict):
                     continue
-                memory_id = memory.get("memory_id")
-                statement = memory.get("statement")
-                if isinstance(memory_id, str) and isinstance(statement, str):
-                    retrieved_ids.append(memory_id)
-                    statements[memory_id] = statement
+                record_id = record.get("memory_id") or record.get("record_id")
+                statement = record.get("statement") or record.get("content") or record.get("title")
+                category = str(record.get("category") or "memory")
+                if isinstance(record_id, str) and isinstance(statement, str):
+                    retrieved_ids.append(record_id)
+                    statements[record_id] = statement
+                    retrieved_records.append({"category": category, "record_id": record_id})
     retrieved_ids = list(dict.fromkeys(retrieved_ids))
     used_ids = [
         memory_id
         for memory_id in retrieved_ids
-        if _words(statements.get(memory_id, "")) & answer_words
+        if tokenize(statements.get(memory_id, "")) & answer_words
     ]
     return {
         "retrieved_memory_ids": retrieved_ids,
         "mentioned_memory_ids": used_ids,
         "unmentioned_memory_ids": [item for item in retrieved_ids if item not in used_ids],
-        "method": "model-directed tool retrieval with answer overlap diagnostic",
+        "retrieved_record_ids": retrieved_ids,
+        "used_record_ids": used_ids,
+        "unused_record_ids": [item for item in retrieved_ids if item not in used_ids],
+        "retrieved_records": list(
+            {(item["category"], item["record_id"]): item for item in retrieved_records}.values()
+        ),
+        "method": "model-directed unified semantic retrieval with answer overlap diagnostic",
     }

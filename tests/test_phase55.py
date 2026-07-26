@@ -44,7 +44,7 @@ def test_context_sections_are_persisted_and_used_by_preview(tmp_path):
     assert "Use a calm and direct tone." in preview.text
     assert "Owner" in preview.text
     assert "America/New_York" in preview.text
-    assert "search_memories" in preview.text
+    assert "search_saved_context" in preview.text
 
 
 def test_context_save_increments_active_prompt_version(tmp_path):

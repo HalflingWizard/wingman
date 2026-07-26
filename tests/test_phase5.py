@@ -96,4 +96,4 @@ def test_time_aware_planning_context(tmp_path):
         assert "Dinner after exams" not in context.dynamic_context
         assert "Dinner date" not in context.dynamic_context
         assert "Confirm booking" not in context.dynamic_context
-        assert "search_planning" in context.static_context
+        assert "unified saved context search" in context.static_context

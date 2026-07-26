@@ -1393,6 +1393,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                         query_embedding_provider=lambda query: model_client.embed(
                             query, settings.openai_embedding_model
                         ),
+                        embedding_batch_provider=lambda texts: model_client.embed_many(
+                            texts, settings.openai_embedding_model
+                        ),
                     ),
                 ),
                 timeout=settings.response_timeout_seconds,
@@ -1487,10 +1490,12 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     with sessions() as session:
                         user = get_or_create_user(session, owner_id)
                         memory = get_owned_memory(session, user, memory_id)
-                        statement = memory.statement if memory is not None else ""
-                    if statement:
+                        embedding_text = (
+                            memory.embedding_text or memory.statement if memory is not None else ""
+                        )
+                    if embedding_text:
                         vector = await model_client.embed(
-                            statement, settings.openai_embedding_model
+                            embedding_text, settings.openai_embedding_model
                         )
                         with sessions() as session:
                             user = get_or_create_user(session, owner_id)

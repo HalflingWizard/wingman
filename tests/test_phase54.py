@@ -76,8 +76,18 @@ def test_model_client_requests_query_embedding_without_forcing_tool_choice():
                     output=[
                         SimpleNamespace(
                             type="function_call",
-                            name="search_memories",
-                            arguments=json.dumps({"query": "pizza place", "top_k": 5}),
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "pizza place",
+                                    "categories": ["place"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
                             call_id="call-search",
                         )
                     ],
@@ -98,8 +108,10 @@ def test_model_client_requests_query_embedding_without_forcing_tool_choice():
         return [1.0, 0.0]
 
     def execute(name: str, arguments: dict[str, object]) -> dict[str, object]:
+        if name == "__search_documents__":
+            return {"documents": []}
         captured_arguments.append((name, arguments))
-        return {"memories": []}
+        return {"records": []}
 
     answer = asyncio.run(
         client.reply(
@@ -113,4 +125,7 @@ def test_model_client_requests_query_embedding_without_forcing_tool_choice():
 
     assert answer == "No saved match was relevant."
     assert captured_arguments[0][1]["_query_embedding"] == [1.0, 0.0]
-    assert calls[0]["tool_choice"] == "auto"
+    assert calls[0]["tool_choice"] == {
+        "type": "function",
+        "name": "search_saved_context",
+    }

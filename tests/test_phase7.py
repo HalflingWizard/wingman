@@ -46,8 +46,18 @@ def test_model_client_runs_application_controlled_tool_loop():
                     output=[
                         SimpleNamespace(
                             type="function_call",
-                            name="search_memories",
-                            arguments=json.dumps({"query": "jewelry"}),
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "jewelry",
+                                    "categories": ["memory"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
                             call_id="call-1",
                         )
                     ],
@@ -65,7 +75,7 @@ def test_model_client_runs_application_controlled_tool_loop():
 
     def execute(name, arguments):
         executed.append((name, arguments))
-        return {"memories": [{"statement": "She likes silver accessories"}]}
+        return {"records": [{"content": "She likes silver accessories"}]}
 
     answer = asyncio.run(
         client.reply(
@@ -78,7 +88,20 @@ def test_model_client_runs_application_controlled_tool_loop():
         )
     )
     assert answer == "She likes silver accessories."
-    assert executed == [("search_memories", {"query": "jewelry"})]
+    assert executed == [
+        (
+            "search_saved_context",
+            {
+                "query": "jewelry",
+                "categories": ["memory"],
+                "top_k": 5,
+                "mode": "search",
+                "city": None,
+                "date_from": None,
+                "date_to": None,
+            },
+        )
+    ]
     assert "tools" in calls[0]
     assert calls[1]["input"][-1]["type"] == "function_call_output"
     assert client.last_request_snapshot["model"] == "gpt-5-nano"
@@ -87,9 +110,10 @@ def test_model_client_runs_application_controlled_tool_loop():
     assert client.last_request_snapshot["store"] is False
     assert client.last_request_snapshot["tools"][0]["parameters"]["required"] == [
         "query",
+        "categories",
         "top_k",
+        "mode",
+        "city",
         "date_from",
         "date_to",
-        "memory_types",
-        "person_name",
     ]

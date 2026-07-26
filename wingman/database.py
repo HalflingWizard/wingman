@@ -55,6 +55,7 @@ def initialize_database(settings: Settings) -> None:
                 "embedding_json": "TEXT",
                 "last_retrieved_at": "DATETIME",
             }
+            planning_embedding_tables = ("places", "saved_ideas", "events", "reminders")
             attachment_columns = {
                 "size_bytes": "INTEGER",
                 "width": "INTEGER",
@@ -68,6 +69,13 @@ def initialize_database(settings: Settings) -> None:
             for name, definition in additions.items():
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE memories ADD COLUMN {name} {definition}"))
+            for table_name in planning_embedding_tables:
+                table_columns = {
+                    row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))
+                }
+                for name in ("embedding_text", "embedding_json"):
+                    if name not in table_columns:
+                        connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} TEXT"))
             for name, definition in attachment_columns.items():
                 if name not in attachment_table_columns:
                     connection.execute(

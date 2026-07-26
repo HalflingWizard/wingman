@@ -190,6 +190,8 @@ class Place(Base):
     atmosphere_tags: Mapped[str] = mapped_column(String(500), default="")
     price_level: Mapped[int | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="candidate", index=True)
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -204,6 +206,8 @@ class SavedIdea(Base):
     place_id: Mapped[str | None] = mapped_column(ForeignKey("places.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="saved", index=True)
     used: Mapped[bool] = mapped_column(default=False)
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -223,6 +227,8 @@ class Event(Base):
     emotional_context: Mapped[str] = mapped_column(Text, default="")
     discussed: Mapped[bool] = mapped_column(default=False)
     place_id: Mapped[str | None] = mapped_column(ForeignKey("places.id"), nullable=True)
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -241,6 +247,8 @@ class Reminder(Base):
         DateTime(timezone=True), nullable=True
     )
     delivery_status: Mapped[str] = mapped_column(String(20), default="pending")
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 

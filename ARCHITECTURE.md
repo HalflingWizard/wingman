@@ -1,6 +1,6 @@
 # Architecture
 
-Wingman 5.9.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
+Wingman 5.10.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
 The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
@@ -10,11 +10,12 @@ The application is designed for one trusted owner on one machine. It favors clea
 2. The handler checks the numeric Telegram user ID against the configured owner ID.
 3. The authorized message is stored in SQLite.
 4. Text is normalized directly, while voice audio is downloaded into memory and transcribed.
-5. The conversation, summary, pending state, and no preloaded memories are loaded.
+5. The conversation, summary, and pending state are loaded. Saved records remain in the database.
 6. The context builder creates separate static instructions, dynamic context, and recent message history.
-7. The OpenAI Responses API receives the request and may request multiple validated memory or planning actions. Time filters and Telegram reply or card context are included when relevant.
-8. The application validates and executes the simplified active tool set, prevents repeated writes within the turn, records results, and continues the bounded tool loop.
-9. The assistant response is stored and sent to Telegram.
+7. The first OpenAI Responses API step must make an explicit saved-context retrieval decision. The model selects relevant categories and a semantic query.
+8. The application runs hybrid search across memories, places, ideas, events, and reminders, then returns only ranked matches to the same model.
+9. The application validates later actions, prevents repeated writes within the turn, preserves the original request and all tool results, and continues the bounded tool loop.
+10. The assistant response is stored and sent to Telegram.
 
 The web dashboard reads the same local state and exposes controls for memories, context, planning tabs, diagnostics, settings, location and timezone, backups, import, export, and bot lifecycle.
 
@@ -22,7 +23,7 @@ The web dashboard reads the same local state and exposes controls for memories, 
 
 Static context contains owner-editable conversation guidance from `prompts/wingman.md`, followed by application-controlled safety, privacy, memory, identity, and time rules. The editable guidance controls style only and cannot override application policy.
 
-Dynamic context is built for each message. It contains recent messages, rolling conversation summaries, and relevant planning state. The model uses search tools when it needs saved memories or planning records. The builder keeps the result within the configured context budget.
+Dynamic context is built for each message. It contains rolling conversation summaries and temporary turn state. Saved records are not preloaded into this context. The agent retrieves a small relevant set through the unified search tool.
 
 Recent messages remain separate from dynamic context. The current user message appears once in the API request. The API-call inspector stores these layers so the owner can understand what the model received.
 
@@ -30,7 +31,9 @@ Recent messages remain separate from dynamic context. The current user message a
 
 Memories belong to the configured owner and support types, statuses, confidence, importance, soft deletion, notes, and Telegram card references. Memory notes preserve evidence, context, and source message IDs without requiring duplicate memory records.
 
-Retrieval is model-directed. When the model calls `search_memories`, the application embeds the query and combines cosine similarity with normalized lexical matching. Deterministic importance, confidence, and recency weighting ranks relevant candidates, while minimum relevance thresholds reject weak name-only matches. Query data, candidate text, score components, notes, and source IDs are recorded in retrieval logs for dashboard inspection. Lexical retrieval remains available when an embedding is missing or fails.
+Retrieval uses one `search_saved_context` tool across personal memories, places, ideas, events, and reminders. The first agent step is required to use this tool, while the model chooses the semantic query, relevant categories, filters, and whether ranked search or a list is needed. Missing vectors for existing records are generated lazily. Cosine similarity, normalized lexical overlap, and recency rank candidates. Weak candidates are rejected.
+
+The complete original user input, every function call, and every function result remain in the Responses API input during later tool rounds. The model can refine a weak search, broaden categories, and ground the final answer in all retrieved results. Retrieval logs include routing decisions, category filters, candidate text, score components, selected records, and failures.
 
 The active agent saves useful durable observations directly. Memory tools are application-controlled, ownership-checked, schema-validated, audited, and bounded by the model loop. Deletion remains an owner-controlled Telegram card or dashboard action.
 

@@ -1,6 +1,17 @@
 # Implementation plan
 
-Wingman 5.9.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.10.0 is the current development release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.10 completed
+
+- Replace isolated memory and planning searches in the active agent tool set with one semantic saved-context search.
+- Let the model select relevant categories across memories, places, ideas, events, and reminders.
+- Require the first agent step to make an explicit retrieval decision without inserting saved records into the prompt.
+- Add hybrid semantic and lexical ranking for every saved record category.
+- Lazily create missing embeddings for existing and dashboard-created records.
+- Keep the bounded tool loop available for refined and cross-category follow-up searches.
+- Record retrieval routing, categories, candidates, scores, selected records, and failures in diagnostics.
+- Add end-to-end mocked agent tests for direct, indirect, cross-category, missing-result, update, and ambiguous-reference behavior.
 
 ## Phase 5.9 completed
 
@@ -612,7 +623,7 @@ Model-directed retrieval and attachment intake hardening
 
 ## Version 5.x roadmap
 
-Each phase below is a release increment. The current completed release is 5.9.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+Each phase below is a release increment. The current completed release is 5.10.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
 
 ### Phase 5.4
 

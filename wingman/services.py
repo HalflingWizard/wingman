@@ -214,6 +214,10 @@ def update_memory(session: Session, user: User, memory_id: str, **fields: Any) -
         raise ValueError("Importance must be between 1 and 5")
     for key, value in fields.items():
         setattr(memory, key, value.strip() if key == "statement" else value)
+    if "statement" in fields:
+        notes = list_memory_notes(session, user, memory.id)
+        memory.embedding_text = ". ".join([memory.statement, *(note.text for note in notes)])
+        memory.embedding_json = None
     memory.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(memory)
@@ -258,7 +262,10 @@ def add_memory_note(
         confidence=confidence,
     )
     session.add(note)
-    memory.embedding_text = f"{memory.statement}. {text.strip()}"
+    session.flush()
+    existing_notes = list_memory_notes(session, user, memory.id)
+    memory.embedding_text = ". ".join([memory.statement, *(item.text for item in existing_notes)])
+    memory.embedding_json = None
     memory.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(note)
@@ -296,7 +303,9 @@ def update_memory_note(
         raise ValueError("Unsupported memory note type")
     note.text = text.strip()
     note.note_type = note_type
-    memory.embedding_text = f"{memory.statement}. {note.text}"
+    notes = list_memory_notes(session, user, memory.id)
+    memory.embedding_text = ". ".join([memory.statement, *(item.text for item in notes)])
+    memory.embedding_json = None
     memory.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(note)
@@ -305,15 +314,58 @@ def update_memory_note(
 
 def delete_memory_note(session: Session, user: User, note_id: str) -> None:
     note = session.get(MemoryNote, note_id)
-    if note is None or get_owned_memory(session, user, note.memory_id) is None:
+    memory = get_owned_memory(session, user, note.memory_id) if note is not None else None
+    if note is None or memory is None:
         raise ValueError("Memory note does not exist")
     session.delete(note)
+    session.flush()
+    notes = list_memory_notes(session, user, memory.id)
+    memory.embedding_text = ". ".join([memory.statement, *(item.text for item in notes)])
+    memory.embedding_json = None
     session.commit()
 
 
 PLACE_STATUSES = {"candidate", "saved", "visited", "dismissed", "deleted"}
 EVENT_STATUSES = {"planned", "completed", "cancelled"}
 REMINDER_STATUSES = {"scheduled", "completed", "cancelled"}
+
+
+def planning_record_text(record: Place | SavedIdea | Event | Reminder) -> str:
+    """Return the complete searchable text for a planning record."""
+    if isinstance(record, Place):
+        return " ".join(
+            part
+            for part in (
+                record.name,
+                record.place_type,
+                record.address,
+                record.city,
+                record.description,
+                record.atmosphere_tags,
+            )
+            if part
+        )
+    if isinstance(record, SavedIdea):
+        return " ".join(part for part in (record.title, record.reason) if part)
+    if isinstance(record, Event):
+        return " ".join(
+            part
+            for part in (
+                record.title,
+                record.event_type,
+                record.description,
+                record.emotional_context,
+                record.start_at.isoformat(),
+            )
+            if part
+        )
+    return " ".join(part for part in (record.title, record.scheduled_at.isoformat()) if part)
+
+
+def refresh_planning_embedding_text(record: Place | SavedIdea | Event | Reminder) -> None:
+    """Refresh searchable text and invalidate a stale vector."""
+    record.embedding_text = planning_record_text(record)
+    record.embedding_json = None
 
 
 def _owned(session: Session, model: type[Any], user: User, record_id: str) -> Any:
@@ -348,6 +400,7 @@ def create_place(
         source_url=source_url.strip(),
         atmosphere_tags=atmosphere_tags.strip(),
     )
+    refresh_planning_embedding_text(place)
     session.add(place)
     session.commit()
     session.refresh(place)
@@ -387,6 +440,7 @@ def update_place(session: Session, user: User, place_id: str, **fields: Any) -> 
         raise ValueError("Invalid place fields")
     for key, value in fields.items():
         setattr(place, key, value.strip() if isinstance(value, str) else value)
+    refresh_planning_embedding_text(place)
     place.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(place)
@@ -405,6 +459,7 @@ def create_saved_idea(
     if place_id is not None:
         _owned(session, Place, user, place_id)
     idea = SavedIdea(user_id=user.id, title=title.strip(), reason=reason.strip(), place_id=place_id)
+    refresh_planning_embedding_text(idea)
     session.add(idea)
     session.commit()
     session.refresh(idea)
@@ -426,6 +481,7 @@ def update_saved_idea(session: Session, user: User, idea_id: str, **fields: Any)
         _owned(session, Place, user, str(fields["place_id"]))
     for key, value in fields.items():
         setattr(idea, key, value.strip() if isinstance(value, str) else value)
+    refresh_planning_embedding_text(idea)
     idea.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(idea)
@@ -474,6 +530,7 @@ def create_event(
         description=description.strip(),
         place_id=place_id,
     )
+    refresh_planning_embedding_text(event)
     session.add(event)
     session.commit()
     session.refresh(event)
@@ -504,6 +561,7 @@ def update_event(session: Session, user: User, event_id: str, **fields: Any) -> 
         _owned(session, Place, user, str(fields["place_id"]))
     for key, value in fields.items():
         setattr(event, key, value.strip() if isinstance(value, str) else value)
+    refresh_planning_embedding_text(event)
     event.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(event)
@@ -555,6 +613,7 @@ def create_reminder(
         timezone=timezone.strip() or "UTC",
         event_id=event_id,
     )
+    refresh_planning_embedding_text(reminder)
     session.add(reminder)
     session.commit()
     session.refresh(reminder)
@@ -574,6 +633,7 @@ def update_reminder(session: Session, user: User, reminder_id: str, **fields: An
         _owned(session, Event, user, str(fields["event_id"]))
     for key, value in fields.items():
         setattr(reminder, key, value.strip() if isinstance(value, str) else value)
+    refresh_planning_embedding_text(reminder)
     reminder.updated_at = datetime.now(UTC)
     session.commit()
     session.refresh(reminder)

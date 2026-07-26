@@ -141,7 +141,7 @@ def test_responses_payload_separates_static_dynamic_and_history():
     assert answer.startswith("Use the silver")
     request = calls[0]
     assert request["instructions"].startswith("Static profile and safety rules.")
-    assert "search_memories" in request["instructions"]
+    assert "search_saved_context" in request["instructions"]
     assert request["instructions"].endswith(
         "The user's name is Odysseus. The person discussed is Penelope."
     )

@@ -80,12 +80,11 @@ def build_context(
         "When a place, idea, event, or reminder is clearly worth saving, save it without asking "
         "permission first. Unknown optional details may remain unknown. Keep save confirmations "
         "natural and leave technical fields for the card. "
-        "Retrieval policy. Saved memories and planning records are not automatically provided "
-        "for every turn. Use search_memories when the request needs saved context, prior history, "
-        "or a duplicate check. If it returns no matches, continue with the conversation and "
-        "general knowledge. For recommendations about places or plans, use search_planning "
-        "when saved records could improve the answer, then combine those records with general "
-        "knowledge. Never mention retrieval mechanics in the reply. "
+        "Retrieval policy. Saved records are not inserted into the prompt. Use the unified saved "
+        "context search to retrieve relevant personal memories, places, ideas, events, and "
+        "reminders. Select categories from the meaning of the request, search several categories "
+        "when useful, and refine the search when initial results are insufficient. Use relevant "
+        "results naturally and never mention retrieval mechanics in the reply. "
         f"The user's name is {user.name or 'the user'}. "
         f"The primary person's name is {primary_person_name or 'not configured'}. "
         f"The user's timezone is {timezone}. The current local date and time is {current_time}."
@@ -101,10 +100,9 @@ def build_context(
             )
             line += f"\n  Evidence {evidence}"
         memory_lines.append(line)
-    dynamic_parts = [
-        "Relevant saved context:\n"
-        + ("\n".join(memory_lines) if memory_lines else "- None was preloaded")
-    ]
+    dynamic_parts = []
+    if memory_lines:
+        dynamic_parts.append("Relevant saved context:\n" + "\n".join(memory_lines))
     if summary is not None and summary.summary_text:
         dynamic_parts.insert(0, f"Conversation summary:\n{summary.summary_text}")
     if pending_state is not None:

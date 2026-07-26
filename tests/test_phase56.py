@@ -13,10 +13,9 @@ from wingman.tools import MemoryToolExecutor
 def test_phase56_exposes_only_simplified_tools():
     names = {tool["name"] for tool in AVAILABLE_TOOLS}
     assert names == {
-        "search_memories",
+        "search_saved_context",
         "create_memory",
         "update_memory",
-        "search_planning",
         "create_place",
         "create_saved_idea",
         "create_event",
@@ -58,6 +57,29 @@ def test_phase56_replays_duplicate_write_without_second_execution():
             self.count += 1
             calls.append(kwargs)
             if self.count == 1:
+                return SimpleNamespace(
+                    output=[
+                        SimpleNamespace(
+                            type="function_call",
+                            name="search_saved_context",
+                            arguments=json.dumps(
+                                {
+                                    "query": "owner quiet cafe preference",
+                                    "categories": ["memory"],
+                                    "top_k": 5,
+                                    "mode": "search",
+                                    "city": None,
+                                    "date_from": None,
+                                    "date_to": None,
+                                }
+                            ),
+                            call_id="search",
+                        )
+                    ],
+                    output_text="",
+                    usage=None,
+                )
+            if self.count == 2:
                 call = SimpleNamespace(
                     type="function_call",
                     name="create_memory",
@@ -80,6 +102,8 @@ def test_phase56_replays_duplicate_write_without_second_execution():
     executed = []
 
     def execute(name, arguments):
+        if name == "search_saved_context":
+            return {"records": []}
         executed.append((name, arguments))
         return {"created": True, "verified": True}
 
@@ -94,4 +118,4 @@ def test_phase56_replays_duplicate_write_without_second_execution():
     )
     assert answer == "Saved."
     assert len(executed) == 1
-    assert calls[1]["input"][-1]["type"] == "function_call_output"
+    assert calls[2]["input"][-1]["type"] == "function_call_output"

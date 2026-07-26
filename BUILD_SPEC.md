@@ -1,6 +1,6 @@
 # Build a local Telegram wingman agent with a web administration interface
 
-The completed application is Wingman 5.9.0. This document describes the product requirements that define the implementation.
+The completed application is Wingman 5.10.0. This document describes the product requirements that define the implementation.
 
 The current implementation also includes controlled model memory and planning tools, source-linked records, rolling conversation summaries, retrieval inspection, a responsive dashboard, editable context guidance, local settings editing, JSON import and export, backups, lifecycle controls, port fallback, temporary attachment handling, and release diagnostics.
 
@@ -982,10 +982,17 @@ Regenerate an embedding only when the relevant source text changes.
 
 Implement a small validated tool set.
 
+### Saved-context search
+
+```text
+search_saved_context
+```
+
+This search covers memories, places, saved ideas, events, and reminders. The model selects one or more categories from the request meaning and may refine or broaden the search over several tool rounds.
+
 ### Memory tools
 
 ```text
-search_memories
 create_memory
 update_memory
 ```
@@ -993,7 +1000,6 @@ update_memory
 ### Place and idea tools
 
 ```text
-search_planning
 create_place
 create_saved_idea
 create_event
@@ -1033,9 +1039,7 @@ resolve_pending_state
 cancel_pending_state
 ```
 
-The application should normally perform retrieval before calling the model.
-
-Do not require the model to call a memory search tool on every turn.
+The first agent step must make an explicit saved-context retrieval decision. An empty category selection is valid when saved information cannot help. Saved records must not be inserted into every prompt.
 
 All modifying tool calls must be validated for
 
