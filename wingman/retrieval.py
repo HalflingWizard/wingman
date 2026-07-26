@@ -133,7 +133,7 @@ def retrieve_memories(
             + 0.10 * memory.confidence
             + 0.05 * recency
         )
-        if keyword_match or semantic_similarity or memory.importance >= 4:
+        if keyword_match or semantic_similarity:
             results.append(
                 RetrievalResult(
                     memory,

@@ -32,14 +32,9 @@ from wingman.database import session_factory
 from wingman.inbound import InboundAttachment, InboundMessage, cleanup_inbound_attachments
 from wingman.lifecycle import is_paused
 from wingman.model_client import AVAILABLE_TOOLS, ModelClient
-from wingman.models import Event, Memory, Place, Reminder, SavedIdea, now_utc
+from wingman.models import Event, Memory, Message, Place, Reminder, SavedIdea, now_utc
 from wingman.prompting import load_prompt
-from wingman.retrieval import (
-    log_retrieval,
-    retrieval_context_usage,
-    retrieval_query,
-    retrieve_memories,
-)
+from wingman.retrieval import RetrievalResult, retrieval_context_usage
 from wingman.runtime_log import record_runtime_output
 from wingman.services import (
     action_ledger,
@@ -57,7 +52,6 @@ from wingman.services import (
     mark_card_deleted,
     message_display_text,
     pending_deleted_cards,
-    planning_context,
     record_runtime_error,
     reset_conversation,
     save_message_attachments,
@@ -77,7 +71,8 @@ SUPPORTED_DOCUMENTS = {
     ".csv": "text/csv",
     ".json": "application/json",
 }
-SUPPORTED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm"}
+SUPPORTED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".mpeg", ".mpg", ".3gp"}
+SUPPORTED_AUDIO = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".oga", ".opus"}
 VIDEO_FRAME_COUNT = 5
 # Telegram may deliver separate photos and their caption as distinct updates.
 # Three seconds gives the group time to arrive without making normal replies feel slow.
@@ -89,6 +84,37 @@ def supported_document_type(filename: str, mime_type: str | None = None) -> str 
     if extension not in SUPPORTED_DOCUMENTS:
         return None
     return mime_type or SUPPORTED_DOCUMENTS[extension]
+
+
+def is_video_document(message: TelegramMessage) -> bool:
+    document = message.document
+    if document is None:
+        return False
+    return (document.mime_type or "").casefold().startswith("video/") or (
+        Path(document.file_name or "").suffix.casefold() in SUPPORTED_VIDEOS
+    )
+
+
+def is_audio_document(message: TelegramMessage) -> bool:
+    document = message.document
+    if document is None:
+        return False
+    return (document.mime_type or "").casefold().startswith("audio/") or (
+        Path(document.file_name or "").suffix.casefold() in SUPPORTED_AUDIO
+    )
+
+
+def is_video_attachment(message: TelegramMessage) -> bool:
+    return (
+        message.video is not None
+        or message.video_note is not None
+        or message.animation is not None
+        or is_video_document(message)
+    )
+
+
+def is_audio_attachment(message: TelegramMessage) -> bool:
+    return message.audio is not None or is_audio_document(message)
 
 
 def memory_card(memory: Memory) -> tuple[str, InlineKeyboardMarkup]:
@@ -205,6 +231,56 @@ async def transcribe_voice(
         source_type="telegram_voice",
         provider_message_id=message.message_id,
         attachments=(attachment,),
+    )
+
+
+async def transcribe_audio_document(
+    message: TelegramMessage, model_client: ModelClient, settings: Settings
+) -> InboundMessage:
+    audio_file = message.audio or message.document
+    if audio_file is None or message.bot is None:
+        raise ValueError("Audio file is not available")
+    filename = audio_file.file_name or "wingman-audio"
+    extension = Path(filename).suffix.casefold()
+    mime_type = (audio_file.mime_type or "").casefold()
+    if extension not in SUPPORTED_AUDIO and not mime_type.startswith("audio/"):
+        raise ValueError("This audio format is not supported yet")
+    if audio_file.file_size and audio_file.file_size > settings.voice_max_bytes:
+        raise ValueError("Audio file is too large")
+    remote_file = await message.bot.get_file(audio_file.file_id)
+    if not remote_file.file_path:
+        raise RuntimeError("Telegram did not provide an audio file path")
+    buffer = BytesIO()
+    try:
+        await asyncio.wait_for(
+            message.bot.download_file(remote_file.file_path, destination=buffer),
+            timeout=settings.document_processing_timeout_seconds,
+        )
+        audio = buffer.getvalue()
+        if not audio:
+            raise ValueError("Audio file is empty")
+        if len(audio) > settings.voice_max_bytes:
+            raise ValueError("Audio file is too large")
+        transcript = await model_client.transcribe(
+            audio, filename, settings.openai_transcription_model
+        )
+    finally:
+        buffer.close()
+        audio = b""
+    return InboundMessage(
+        text=transcript,
+        source_type="telegram_audio",
+        provider_message_id=message.message_id,
+        attachments=(
+            InboundAttachment(
+                source_type="telegram_audio",
+                provider_file_id=audio_file.file_id,
+                filename=filename,
+                content_type=audio_file.mime_type or "audio/octet-stream",
+                expires_at=datetime.now(UTC)
+                + timedelta(seconds=settings.attachment_retention_seconds),
+            ),
+        ),
     )
 
 
@@ -459,13 +535,16 @@ async def download_video(
     ffmpeg = media_tool_path("ffmpeg")
     if ffmpeg is None or media_tool_path("ffprobe") is None:
         raise RuntimeError("Video processing tools are not installed")
-    video = message.video or message.video_note
+    video = message.video or message.video_note or message.animation or message.document
     if video is None or message.bot is None:
         raise ValueError("Video message is not available")
     filename = getattr(video, "file_name", None) or "wingman-video.mp4"
     extension = Path(filename).suffix.casefold() or ".mp4"
-    if extension not in SUPPORTED_VIDEOS:
+    mime_type = (getattr(video, "mime_type", "") or "").casefold()
+    if extension not in SUPPORTED_VIDEOS and not mime_type.startswith("video/"):
         raise ValueError("This video format is not supported yet")
+    if extension not in SUPPORTED_VIDEOS:
+        extension = ".mp4"
     if video.file_size and video.file_size > settings.video_max_bytes:
         raise ValueError("Video is too large")
     remote_file = await message.bot.get_file(video.file_id)
@@ -482,6 +561,8 @@ async def download_video(
                 message.bot.download_file(remote_file.file_path, destination=file),
                 timeout=settings.video_processing_timeout_seconds,
             )
+        if Path(video_path).stat().st_size == 0:
+            raise ValueError("Video file is empty")
         if Path(video_path).stat().st_size > settings.video_max_bytes:
             raise ValueError("Video is too large")
         duration, has_audio = await inspect_video(video_path, settings)
@@ -714,6 +795,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     or item.document
                     or item.video is not None
                     or item.video_note is not None
+                    or item.animation is not None
+                    or item.audio is not None
                 )
             ),
             batch[0],
@@ -738,6 +821,15 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 conversation = get_or_create_conversation(session, user)
                 add_message(session, conversation, "assistant", assistant_text)
 
+        def record_dashboard_inbound(user_text: str) -> str:
+            with sessions() as session:
+                user = get_or_create_user(session, owner_id, settings.user_name)
+                conversation = get_or_create_conversation(session, user)
+                inbound_record = add_message(
+                    session, conversation, "user", user_text, message.message_id
+                )
+                return inbound_record.id
+
         additional_text = [
             item.text or "" for item in batch if item is not primary and (item.text or "").strip()
         ]
@@ -748,6 +840,8 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             and not message.document
             and message.video is None
             and message.video_note is None
+            and message.animation is None
+            and message.audio is None
         ):
             reply = (
                 "I can process text, voice, image, document, and video messages. "
@@ -766,6 +860,21 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             record_dashboard_status(message.caption or "[voice message]", reply)
             await message.answer(reply)
             return
+        initial_text = message.text or message.caption or ""
+        if additional_text:
+            initial_text = "\n\n".join(part for part in [initial_text, *additional_text] if part)
+        if not initial_text:
+            if is_video_attachment(message):
+                initial_text = "[video message]"
+            elif is_audio_attachment(message):
+                initial_text = "[audio file]"
+            elif message.voice is not None:
+                initial_text = "[voice message]"
+            elif message.photo:
+                initial_text = "[image message]"
+            elif message.document is not None:
+                initial_text = "[document message]"
+        user_message_id = record_dashboard_inbound(initial_text)
         try:
             if message.voice is not None:
                 assert model_client is not None
@@ -775,7 +884,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
             elif message.photo:
                 if model_client is None:
                     reply = "I need an OpenAI API key to analyze images."
-                    record_dashboard_status(message.caption or "[image message]", reply)
+                    record_dashboard_assistant(reply)
                     await message.answer(reply)
                     return
                 if message.media_group_id:
@@ -797,29 +906,37 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                         )
                 else:
                     inbound = await with_typing(message, download_photo(message, settings))
-            elif message.document:
+            elif message.audio is not None:
                 if model_client is None:
-                    reply = "I need an OpenAI API key to analyze files."
-                    record_dashboard_status(message.caption or "[document message]", reply)
-                    await message.answer(reply)
-                    return
-                if (message.document.mime_type or "").casefold().startswith("image/"):
-                    inbound = await with_typing(message, download_image_document(message, settings))
-                else:
-                    inbound = await with_typing(message, download_document(message, settings))
-            elif message.video is not None:
-                if model_client is None:
-                    reply = "I need an OpenAI API key to analyze videos."
-                    record_dashboard_status(message.caption or "[video message]", reply)
+                    reply = "I need an OpenAI API key to transcribe audio files."
+                    record_dashboard_assistant(reply)
                     await message.answer(reply)
                     return
                 inbound = await with_typing(
-                    message, download_video(message, model_client, settings)
+                    message, transcribe_audio_document(message, model_client, settings)
                 )
-            elif message.video_note is not None:
+            elif message.document:
+                if model_client is None:
+                    reply = "I need an OpenAI API key to analyze files."
+                    record_dashboard_assistant(reply)
+                    await message.answer(reply)
+                    return
+                if is_video_document(message):
+                    inbound = await with_typing(
+                        message, download_video(message, model_client, settings)
+                    )
+                elif is_audio_document(message):
+                    inbound = await with_typing(
+                        message, transcribe_audio_document(message, model_client, settings)
+                    )
+                elif (message.document.mime_type or "").casefold().startswith("image/"):
+                    inbound = await with_typing(message, download_image_document(message, settings))
+                else:
+                    inbound = await with_typing(message, download_document(message, settings))
+            elif is_video_attachment(message):
                 if model_client is None:
                     reply = "I need an OpenAI API key to analyze videos."
-                    record_dashboard_status(message.caption or "[video message]", reply)
+                    record_dashboard_assistant(reply)
                     await message.answer(reply)
                     return
                 inbound = await with_typing(
@@ -842,12 +959,17 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 operation="media processing",
             )
             await send_typing(message)
-        except (RuntimeError, ValueError) as exc:
+        except Exception as exc:
             with sessions() as session:
                 user = get_or_create_user(session, owner_id, settings.user_name)
                 record_runtime_error(session, user, "media processing", exc, message.message_id)
-            reply = f"I could not process that input. {exc}"
-            record_dashboard_status(message.caption or "[media message]", reply)
+            if isinstance(exc, (RuntimeError, ValueError)):
+                reply = f"I could not process that input. {exc}"
+            else:
+                reply = (
+                    "I could not process that media input because downloading or decoding failed."
+                )
+            record_dashboard_assistant(reply)
             await message.answer(reply)
             return
         if len(inbound.attachments) > settings.max_attachments:
@@ -859,7 +981,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         transcription_snapshot = (
             dict(model_client.last_transcription_snapshot)
             if model_client is not None
-            and inbound.source_type in {"telegram_voice", "telegram_video"}
+            and inbound.source_type in {"telegram_voice", "telegram_audio", "telegram_video"}
             else {}
         )
         with sessions() as session:
@@ -875,23 +997,18 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 continue
             with sessions() as session:
                 mark_card_cleaned(session, old_card.id)
-        query_vector = None
-        if model_client is not None:
-            try:
-                if inbound.text.strip():
-                    query_vector = await with_typing(
-                        message, model_client.embed(inbound.text, settings.openai_embedding_model)
-                    )
-            except Exception:
-                pass
-        user_message_id: str | None = None
         with sessions() as session:
             user = get_or_create_user(session, message.from_user.id, settings.user_name)
             conversation = get_or_create_conversation(session, user)
-            user_message = add_message(
-                session, conversation, "user", inbound.text, message.message_id
-            )
-            user_message_id = user_message.id
+            user_message = session.get(Message, user_message_id)
+            if user_message is None:
+                user_message = add_message(
+                    session, conversation, "user", inbound.text, message.message_id
+                )
+                user_message_id = user_message.id
+            else:
+                user_message.text = inbound.text
+                session.commit()
             save_message_attachments(session, user_message.id, inbound.attachments)
             if transcription_snapshot:
                 transcription_run = create_agent_run(
@@ -927,11 +1044,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                         transcription_snapshot.get("response", {}), ensure_ascii=False
                     ),
                 )
-            results = retrieve_memories(session, user, inbound.text, query_vector=query_vector)
-            log_retrieval(session, user, conversation, retrieval_query(inbound.text, user), results)
+            results: list[RetrievalResult] = []
             summary = get_or_create_summary(session, conversation)
             pending_state = get_open_pending_state(session, user, conversation)
-            places, ideas, events, reminders = planning_context(session, user)
             summary_start = 0
             if summary.summarized_through_message_id:
                 for index, item in enumerate(conversation.messages):
@@ -1022,10 +1137,10 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                 summary=summary,
                 pending_state=pending_state,
                 action_ledger=current_action_ledger,
-                places=places,
-                ideas=ideas,
-                events=events,
-                reminders=reminders,
+                places=[],
+                ideas=[],
+                events=[],
+                reminders=[],
                 prompt_text=load_prompt(settings),
                 max_messages=settings.recent_message_limit,
                 token_budget=settings.context_token_budget,

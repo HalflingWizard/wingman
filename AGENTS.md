@@ -40,13 +40,14 @@ Do not require live Telegram or OpenAI credentials for tests. If a change sends 
 
 ## Version and phase policy
 
-The current release is 4.3.0. Every implemented phase increments the release version.
+The current release is 4.4.0. Every implemented phase increments the release version.
 
 | Phase | Version |
 | --- | --- |
 | 4.1 | 4.1.0 |
 | 4.2 | 4.2.0 |
 | 4.3 | 4.3.0 |
+| 4.4 | 4.4.0 |
 
 Update the version in `pyproject.toml` and `wingman/__init__.py`. Update the README, architecture notes, security notes, implementation plan, and configuration documentation when the change affects them. Create release notes for the current release. After release notes have been used, remove obsolete release-note files. Keep only the current release notes unless the owner asks to retain an older release.
 

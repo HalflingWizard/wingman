@@ -79,6 +79,10 @@ def build_context(
         "When a place, idea, event, or reminder is clearly worth saving, save it without asking "
         "permission first. Unknown optional details may remain unknown. Keep save confirmations "
         "natural and leave technical fields for the card. "
+        "Retrieval policy. Saved memories and planning records are not automatically provided "
+        "for every turn. Use search_memories only when the request needs a relevant past detail "
+        "or a duplicate check. Use search_planning only when the request needs a saved place, "
+        "idea, event, or reminder. Never mention retrieval mechanics in the reply. "
         f"The user's name is {user.name or 'the user'}. "
         f"The primary person's name is {primary_person_name or 'not configured'}. "
         f"The user's timezone is {timezone}. The current local date and time is {current_time}."
@@ -94,7 +98,10 @@ def build_context(
             )
             line += f"\n  Evidence {evidence}"
         memory_lines.append(line)
-    dynamic_parts = ["Relevant saved context:\n" + ("\n".join(memory_lines) or "- None")]
+    dynamic_parts = [
+        "Relevant saved context:\n"
+        + ("\n".join(memory_lines) if memory_lines else "- None was preloaded")
+    ]
     if summary is not None and summary.summary_text:
         dynamic_parts.insert(0, f"Conversation summary:\n{summary.summary_text}")
     if pending_state is not None:
@@ -107,28 +114,6 @@ def build_context(
             )
         else:
             dynamic_parts.append(f"Pending question:\n{pending_state.question_asked}")
-    if places:
-        dynamic_parts.append(
-            "Saved places:\n"
-            + "\n".join(f"- {place.name}. {place.description}" for place in places)
-        )
-    if ideas:
-        dynamic_parts.append(
-            "Saved ideas:\n" + "\n".join(f"- {idea.title}. {idea.reason}" for idea in ideas)
-        )
-    if events:
-        dynamic_parts.append(
-            "Upcoming events:\n"
-            + "\n".join(f"- {event.title} at {event.start_at.isoformat()}" for event in events)
-        )
-    if reminders:
-        dynamic_parts.append(
-            "Upcoming reminders:\n"
-            + "\n".join(
-                f"- {reminder.title} at {reminder.scheduled_at.isoformat()}"
-                for reminder in reminders
-            )
-        )
     if action_ledger and action_ledger.get("items"):
         dynamic_parts.append(
             "Action ledger from the owner's current multi-action request:\n"

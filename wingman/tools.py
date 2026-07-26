@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from wingman.models import Conversation, User
-from wingman.retrieval import retrieve_memories
+from wingman.retrieval import log_retrieval, retrieval_query, retrieve_memories
 from wingman.services import (
     action_ledger,
     add_memory_note,
@@ -212,6 +212,14 @@ class MemoryToolExecutor:
                 matches = retrieve_memories(
                     self.session, self.user, search_data.query, limit=search_data.top_k
                 )
+                if self.conversation is not None:
+                    log_retrieval(
+                        self.session,
+                        self.user,
+                        self.conversation,
+                        retrieval_query(search_data.query, self.user),
+                        matches,
+                    )
                 output = {
                     "memories": [
                         {

@@ -1,6 +1,6 @@
 # Implementation plan
 
-Wingman 4.3.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 4.4.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
 
 ## Product requirements
 
@@ -521,3 +521,18 @@ Status complete
 - Verify dashboard routes, live logs, durable error history, and bounded diagnostic queries.
 - Verify that tests clean up temporary planning records and media files.
 - Keep release notes limited to the current release.
+
+### Phase 4.4
+
+Status complete
+
+Model-directed retrieval and attachment intake hardening
+
+- Stop preloading all memories and planning records into every model request.
+- Require the model to use documented search tools when saved context is needed.
+- Prevent unrelated high-importance memories from bypassing relevance matching.
+- Classify Telegram files by MIME type and filename before selecting the processing path.
+- Process video documents, audio files, animations, normal videos, and video notes through the appropriate pipeline.
+- Persist the incoming dashboard message before media processing so failures remain visible.
+- Record and report download, decoding, transcription, and media API failures with safe user-facing messages and detailed diagnostics.
+- Add tests for model-directed retrieval, file classification, and early dashboard persistence.
