@@ -450,6 +450,8 @@ class ModelClient:
                 if not attachment.local_path:
                     raise ValueError("Attachment is missing its temporary file")
                 attachment_bytes = Path(attachment.local_path).read_bytes()
+                if not attachment_bytes:
+                    raise ValueError("Attachment is empty")
                 if attachment in image_attachments:
                     content.append(
                         {

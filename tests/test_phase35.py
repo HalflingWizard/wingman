@@ -73,3 +73,29 @@ def test_image_only_message_preserves_attachment_metadata_and_cleans_temp_files(
     assert inbound.attachments[0].width == 100
     cleanup_inbound_attachments(inbound)
     assert not Path(attachment.local_path or "").exists()
+
+
+def test_empty_image_attachment_is_rejected_before_openai_request(tmp_path):
+    image_path = tmp_path / "empty.jpg"
+    image_path.write_bytes(b"")
+    attachment = InboundAttachment(
+        source_type="telegram_video_frame",
+        provider_file_id="video-1",
+        content_type="image/jpeg",
+        local_path=str(image_path),
+    )
+    client = ModelClient(Settings(openai_api_key="test-key"))
+
+    try:
+        asyncio.run(
+            client.reply(
+                [("user", "Describe this video")],
+                "Owner",
+                "Person",
+                attachments=(attachment,),
+            )
+        )
+    except ValueError as exc:
+        assert str(exc) == "Attachment is empty"
+    else:
+        raise AssertionError("Empty image attachments must be rejected")

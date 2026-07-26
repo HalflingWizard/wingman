@@ -513,7 +513,9 @@ async def download_video(
                 settings.openai_transcription_model,
             )
         for index in range(VIDEO_FRAME_COUNT):
-            timestamp = duration * index / (VIDEO_FRAME_COUNT - 1)
+            # Avoid sampling exactly at the end of the stream. Some codecs return
+            # an empty frame at that boundary, which cannot be sent to OpenAI.
+            timestamp = duration * (index + 0.5) / VIDEO_FRAME_COUNT
             with NamedTemporaryFile(
                 prefix=f"wingman-video-frame-{index + 1}-", suffix=".jpg", delete=False
             ) as file:
@@ -534,6 +536,8 @@ async def download_video(
                 ],
                 settings.video_processing_timeout_seconds,
             )
+            if Path(frame_path).stat().st_size == 0:
+                raise RuntimeError("Could not extract a video frame")
             frame_paths.append(frame_path)
         text = message.caption or ""
         if transcript:

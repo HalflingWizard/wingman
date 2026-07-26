@@ -1,6 +1,6 @@
 # Implementation plan
 
-Wingman 4.1.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 4.2.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
 
 ## Product requirements
 
@@ -485,6 +485,8 @@ Reliable owner commands, conversation reset, and user-visible failures
 
 ### Phase 4.2
 
+Status complete
+
 Better memory retrieval and tool schema reliability
 
 - Separate lexical exact-term matching, normalized keyword matching, and semantic similarity in retrieval diagnostics.
@@ -493,6 +495,9 @@ Better memory retrieval and tool schema reliability
 - Establish documented allowed values for memory types, planning types, statuses, note types, and action types.
 - Improve tool descriptions and schemas so the model uses the exact allowed values on its first attempt.
 - Add retrieval evaluation cases for related terms such as jewelry, accessories, earrings, and silver.
+- Keep dashboard diagnostics bounded to the latest 100 tool executions, agent runs, API calls, and runtime errors.
+- Sample video frames away from the exact stream endpoint and validate that every frame has bytes before sending it to the model.
+- Reject empty image and frame attachments before request construction so the Telegram error is clear and the API never receives an empty data URL.
 
 ### Phase 4.3
 

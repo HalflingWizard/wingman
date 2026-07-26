@@ -1067,7 +1067,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     .join(Conversation, AgentRun.conversation_id == Conversation.id)
                     .where(Conversation.user_id == user.id)
                     .order_by(AgentRun.created_at.desc())
-                    .limit(30)
+                    .limit(100)
                 )
             )
             runtime_errors = list(
@@ -1155,7 +1155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     .join(Conversation, AgentRun.conversation_id == Conversation.id)
                     .where(Conversation.user_id == user.id)
                     .order_by(AgentRun.created_at.desc())
-                    .limit(50)
+                    .limit(100)
                 )
             )
         cards = []
