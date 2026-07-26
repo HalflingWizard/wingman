@@ -1,5 +1,6 @@
 """Safe export, backup, and update helpers."""
 
+import json
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -51,6 +52,37 @@ def repository_version() -> dict[str, str]:
     except (OSError, subprocess.CalledProcessError):
         return {"commit": "unavailable", "message": "Git metadata unavailable", "branch": ""}
     return {"commit": commit, "message": message, "branch": branch}
+
+
+def _update_status_path(settings: Settings) -> Path:
+    return Path(settings.data_dir) / "update_status.json"
+
+
+def write_update_status(
+    settings: Settings,
+    status: str,
+    logs: list[str],
+    error: str = "",
+    branch: str = "",
+) -> None:
+    path = _update_status_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"status": status, "logs": logs[-200:], "error": error, "branch": branch},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+
+
+def read_update_status(settings: Settings) -> dict[str, Any]:
+    try:
+        value = json.loads(_update_status_path(settings).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"status": "idle", "logs": [], "error": "", "branch": ""}
+    return value if isinstance(value, dict) else {"status": "idle", "logs": []}
 
 
 def database_diagnostics(settings: Settings, session: Session, user: User) -> dict[str, object]:
@@ -267,17 +299,42 @@ def backup_database(settings: Settings) -> Path:
 
 
 def safe_update(settings: Settings) -> str:
-    root = Path.cwd()
+    root = Path(__file__).resolve().parent.parent
+    logs: list[str] = []
+    write_update_status(settings, "running", ["Checking the working tree"])
     clean = subprocess.run(["git", "diff", "--quiet"], cwd=root, check=False)
     if clean.returncode != 0:
+        write_update_status(
+            settings,
+            "failed",
+            ["Working tree has uncommitted changes"],
+            "Refusing update",
+        )
         raise RuntimeError("Refusing update because the working tree has uncommitted changes")
     branch = subprocess.run(
         ["git", "branch", "--show-current"], cwd=root, check=True, capture_output=True, text=True
     ).stdout.strip()
-    subprocess.run(["git", "pull", "--ff-only"], cwd=root, check=True)
-    subprocess.run(
-        [".venv/bin/python", "-m", "pip", "install", "-qqq", "-e", ".[dev]"],
-        cwd=root,
-        check=True,
-    )
+    logs.append(f"Updating branch {branch}")
+    write_update_status(settings, "running", logs, branch=branch)
+    try:
+        pull = subprocess.run(
+            ["git", "pull", "--ff-only"], cwd=root, check=True, capture_output=True, text=True
+        )
+        logs.extend(line for line in pull.stdout.splitlines() if line.strip())
+        logs.append("Installing the current project and development dependencies")
+        write_update_status(settings, "running", logs, branch=branch)
+        install = subprocess.run(
+            [".venv/bin/python", "-m", "pip", "install", "-qqq", "-e", ".[dev]"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        logs.extend(line for line in install.stdout.splitlines() if line.strip())
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        logs.extend(line for line in output.splitlines() if line.strip())
+        write_update_status(settings, "failed", logs, str(exc), branch)
+        raise
+    write_update_status(settings, "completed", logs + ["Update completed"], branch=branch)
     return branch

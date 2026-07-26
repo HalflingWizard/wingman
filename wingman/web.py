@@ -4,7 +4,8 @@
 # ruff: noqa: E501
 
 import json
-from datetime import UTC, datetime
+import threading
+from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Annotated, Any
@@ -46,8 +47,10 @@ from wingman.system import (
     database_diagnostics,
     export_user_data,
     import_user_data,
+    read_update_status,
     repository_version,
     safe_update,
+    write_update_status,
 )
 
 
@@ -172,6 +175,7 @@ def page_shell(title: str, body: str, active: str = "") -> str:
         "align-items:center;padding:.55rem .75rem;background:#192231;color:#e5edf9;font-size:.82rem}.code-toolbar button{padding:.3rem .6rem;background:#34425b;font-size:.75rem}"
         ".code-block{margin:0;overflow:auto;padding:1rem;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}.json-key{color:#79c0ff}.json-string{color:#a5d6ff}.json-number{color:#d2a8ff}.json-boolean{color:#ff7b72}.json-null{color:#ffa657}"
         ".usage-day{display:grid;grid-template-columns:7rem 1fr 6rem;gap:.7rem;align-items:center;margin:.75rem 0;font-size:.82rem}.usage-bar{height:1rem;display:flex;overflow:hidden;border-radius:999px;background:#eef1f7}.usage-bar span{height:100%}table{width:100%;border-collapse:collapse;font-size:.83rem}th,td{text-align:left;padding:.65rem;border-bottom:1px solid #edf0f5;white-space:nowrap}th{color:#53627b;background:#f7f9fc}"
+        ".usage-axis{color:#68778d;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}.usage-chart{height:220px;display:flex;align-items:end;gap:.65rem;padding:1rem .5rem 0;border-bottom:1px solid #cbd4e2}.usage-column{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:end;gap:.35rem;min-width:2.3rem}.usage-column-value{font-size:.68rem;color:#68778d;white-space:nowrap}.usage-column-bar{width:70%;min-height:0;border-radius:.45rem .45rem 0 0;background:linear-gradient(180deg,#7787f4,#5968df)}.usage-column small{color:#68778d;font-size:.7rem}.usage-chart-x{text-align:center;color:#68778d;font-size:.75rem;margin-top:.5rem}.active{box-shadow:inset 0 0 0 2px #5968df}"
         ".record-list{display:grid;gap:1rem;padding:0;list-style:none}.record{padding:1.15rem}.record p:last-child{margin-bottom:0}.record-top,.record-actions,.note-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}.record-top{margin-bottom:.8rem}.record-actions{justify-content:flex-start;margin-top:1rem}.record-actions form{margin:0}.record-actions button,.form-actions button{display:inline-flex;align-items:center;gap:.4rem}.record-meta{display:flex;flex-wrap:wrap;gap:.4rem}.record-statement{font-size:1.08rem;line-height:1.55;margin:0 0 1rem}.note-list{display:grid;gap:.65rem;margin:1rem 0}.note-item{padding:.75rem;border-left:3px solid #aab5ff;background:#f7f9fc;border-radius:0 .6rem .6rem 0}.note-item small{color:#5968df;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.note-item p{margin:.25rem 0 .55rem}.note-item form{display:flex;gap:.5rem;align-items:center}.note-item input{flex:1}.edit-form{border-top:1px solid #edf0f5;padding-top:1rem}.item-list{display:grid;gap:.55rem;padding:0;margin:1rem 0 0;list-style:none}.item-row{display:flex;align-items:flex-start;gap:.65rem;padding:.75rem;border:1px solid #edf0f5;border-radius:.65rem;background:#fbfcfe}.item-row i{color:#5968df;margin-top:.22rem}.item-row strong{display:block}.item-row small{display:block;color:#68778d;margin-top:.15rem}.planning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.planning-grid .panel{margin:0}.conversation-list{display:grid;gap:.8rem}.message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;box-shadow:0 3px 12px rgba(28,45,80,.05)}.message p{margin:.25rem 0 0}.message-user{margin-left:auto;background:#e7ebff;border-bottom-right-radius:.25rem}.message-assistant{margin-right:auto;background:#fff;border:1px solid #e3e8f1;border-bottom-left-radius:.25rem}.message-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:750;color:#5968df}.message-label i{font-size:.72rem}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.settings-grid h2{grid-column:1/-1;margin-bottom:0}.settings-grid .field-wide{grid-column:1/-1}"
         "@media(max-width:760px){.app-shell{display:block}.sidebar{width:auto;padding:.8rem}.sidebar-caption,.sidebar-footer{display:none}.brand{display:inline-flex}.nav-list{display:flex;overflow:auto}.nav-link{white-space:nowrap}.main{padding:1.5rem 1rem}.page-header{display:block}.grid-2,.planning-grid,.form-grid,.settings-grid{grid-template-columns:1fr}.field-wide,.settings-grid h2{grid-column:auto}.message{max-width:94%}}"
         "</style><script>"
@@ -281,8 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<header class='page-header'><div><p class='eyebrow'>Private workspace</p>"
             f"<h1>Good to see you, {escape(active_settings.user_name)}</h1>"
             "<p class='muted'>Keep the important details close and the conversation natural.</p></div>"
-            f"<div class='stack'><span class='badge'><span class='status-dot'></span>Wingman {__version__}</span>"
-            f"<span class='muted'>Commit {escape(revision['commit'][:12])}</span>"
+            f"<div class='stack'><span class='badge'><span class='status-dot'></span>Wingman {__version__} ({escape(revision['commit'][:12])})</span>"
             "<a class='button button-secondary' href='/?refresh=1'><i class='fa-solid fa-arrows-rotate'></i> Refresh</a></div></header>"
             "<section class='summary-grid'>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-brain'></i></div><span class='stat-value'>{memory_count}</span><span class='stat-label'>Saved memories</span></div>"
@@ -294,7 +297,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"<p class='muted'>Database path {escape(str(database_info['database_path']))}</p></section>"
             "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-code-branch'></i> Loaded repository version</h2>"
             f"<span class='badge'>{escape(revision['branch'] or 'detached')}</span></div>"
-            f"<p class='muted'><strong>{escape(revision['commit'])}</strong></p>"
+            f"<p class='muted'><strong>Commit {escape(revision['commit'])}</strong></p>"
             f"<p>{escape(revision['message'])}</p></section>"
             "<section class='panel'><div class='panel-header'><div><p class='eyebrow'>Workspace tools</p>"
             "<h2>Explore Wingman</h2></div><span class='muted'>Everything stays on this machine</span></div>"
@@ -623,22 +626,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/system", response_class=HTMLResponse)
     def system_page() -> str:
         paused = is_paused(active_settings)
-        with session_factory(active_settings)() as session:
-            user = web_user(session)
-            database_info = database_diagnostics(active_settings, session, user)
-        diagnostics = json.dumps(database_info, indent=2, default=str, ensure_ascii=False)
+        revision = repository_version()
+        update = read_update_status(active_settings)
+        update_logs = "\n".join(str(item) for item in update.get("logs", []))
+        update_panel = (
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-terminal'></i> Update progress</h2>"
+            f"<span id='update-status' class='badge'>{escape(str(update.get('status', 'idle')))}</span></div>"
+            f"{code_panel('Update log', update_logs or 'No update has run yet.', 260)}"
+            "<script>setInterval(()=>fetch('/system/update-status').then(r=>r.json()).then(s=>{document.querySelector('#update-status').textContent=s.status;const pre=document.querySelector('.code-block');if(s.logs)pre.textContent=s.logs.join('\\n');}),1500);</script></section>"
+        )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Controls</p><h1>System</h1>"
             "<p class='muted'>Manage the bot lifecycle and local data safely.</p></div></header>"
-            "<section class='panel stack'>"
+            "<section class='panel stack'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-sliders'></i> Bot and data controls</h2></div>"
             + f"<p><span class='badge'><span class='status-dot'></span>Telegram bot {'paused' if paused else 'running'}</span></p>"
             + f"<form method='post' action='/system/bot/{'resume' if paused else 'pause'}'><button>"
             + f"<i class='fa-solid fa-{'play' if paused else 'pause'}'></i> {'Resume bot' if paused else 'Pause bot'}</button></form>"
             + "<p><a class='button button-secondary' href='/system/export'><i class='fa-solid fa-download'></i> Download JSON export</a></p>"
             + "<form method='post' action='/system/import' enctype='multipart/form-data'><label>Import JSON export <input type='file' name='export_file' accept='.json,application/json' required></label> <button class='button-secondary'><i class='fa-solid fa-upload'></i> Import data</button></form>"
             + "<form method='post' action='/system/backup'><button>Backup database</button></form>"
+            + "</section>"
+            + "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-code-branch'></i> Repository update</h2>"
+            + f"<span class='badge'>{escape(revision['branch'] or 'detached')}</span></div>"
+            + f"<p><strong>Version {escape(__version__)}</strong></p><p><strong>Commit {escape(revision['commit'])}</strong></p>"
+            + f"<p>{escape(revision['message'])}</p>"
             + "<form method='post' action='/system/update'><button><i class='fa-solid fa-rotate'></i> Safe Git update</button></form></section>"
-            + code_panel("Database diagnostics", diagnostics, 300)
+            + update_panel
         )
         return page_shell("System", body, "system")
 
@@ -679,18 +692,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/system/update", response_class=HTMLResponse)
     def update_system() -> str:
-        try:
-            branch = safe_update(active_settings)
-            message = (
-                f"Update completed on branch {branch}. Wingman is restarting now so the new "
-                "code and tool definitions are loaded."
-            )
-            schedule_restart()
-        except Exception as exc:
-            message = f"Update failed {exc}"
-        return page_shell(
-            "System", f"<section class='panel'><p>{escape(message)}</p></section>", "system"
-        )
+        current = read_update_status(active_settings)
+        if current.get("status") == "running":
+            return system_page()
+        write_update_status(active_settings, "running", ["Update queued"])
+
+        def run_update() -> None:
+            try:
+                safe_update(active_settings)
+                schedule_restart()
+            except Exception as exc:
+                status = read_update_status(active_settings)
+                write_update_status(
+                    active_settings,
+                    "failed",
+                    [str(item) for item in status.get("logs", [])],
+                    str(exc),
+                    str(status.get("branch", "")),
+                )
+
+        threading.Thread(target=run_update, daemon=True).start()
+        return system_page()
+
+    @app.get("/system/update-status")
+    def update_status() -> dict[str, Any]:
+        status = read_update_status(active_settings)
+        return {
+            "status": status.get("status", "idle"),
+            "logs": status.get("logs", []),
+            "error": status.get("error", ""),
+            "branch": status.get("branch", ""),
+        }
 
     @app.post("/system/bot/pause", response_class=HTMLResponse)
     def pause_bot() -> str:
@@ -856,15 +888,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             )
         records: list[dict[str, Any]] = []
-        daily: dict[str, dict[str, float]] = {}
+        today = datetime.now(UTC).date()
+        days = [(today - timedelta(days=index)).isoformat() for index in range(9, -1, -1)]
+        daily: dict[str, dict[str, dict[str, float]]] = {day: {} for day in days}
         for run in runs:
             operation = usage_operation(run)
             cost = usage_cost(run)
             day = run.created_at.date().isoformat()
-            daily.setdefault(day, {}).setdefault(operation, 0.0)
-            daily[day][operation] += cost or 0.0
+            tokens = (run.input_tokens or 0) + (run.output_tokens or 0)
+            if day in daily:
+                daily[day].setdefault(operation, {"tokens": 0.0, "cost": 0.0})
+                daily[day][operation]["tokens"] += tokens
+                daily[day][operation]["cost"] += cost or 0.0
             records.append(
                 {
+                    "day": day,
                     "date": run.created_at.strftime("%Y-%m-%d %H:%M"),
                     "operation": operation,
                     "model": run.model_name,
@@ -874,9 +912,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "status": run.status,
                 }
             )
-        total_cost = sum(item["cost"] or 0 for item in records)
-        total_input = sum(item["input"] or 0 for item in records)
-        total_output = sum(item["output"] or 0 for item in records)
+        recent_records = [item for item in records if item["day"] in days]
+        total_cost = sum(item["cost"] or 0 for item in recent_records)
+        total_input = sum(item["input"] or 0 for item in recent_records)
+        total_output = sum(item["output"] or 0 for item in recent_records)
         colors = {
             "replies": "#5968df",
             "summary": "#7c5ce5",
@@ -885,43 +924,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "documents": "#d65c86",
             "video": "#4b9ac7",
         }
-        bars = []
-        for day, values in daily.items():
-            total = sum(values.values())
-            segments = []
-            for operation, value in values.items():
-                width = (value / total * 100) if total else 0
-                segments.append(
-                    f"<span title='{escape(operation)} ${value:.8f}' style='width:{width:.2f}%;background:{colors.get(operation, '#8792a8')}'></span>"
-                )
-            bars.append(
-                f"<div class='usage-day'><span>{escape(day)}</span><div class='usage-bar'>{''.join(segments) or '<span style="width:100%;background:#d8deea"></span>'}</div><span>${total:.6f}</span></div>"
-            )
         rows = []
-        for item in reversed(records[-100:]):
+        for item in reversed(records[-200:]):
             cost_text = f"${item['cost']:.8f}" if item["cost"] is not None else "Not estimated"
             rows.append(
-                "<tr>"
+                f"<tr data-day='{escape(item['day'])}' data-date='{escape(item['date'])}' data-operation='{escape(item['operation'])}' data-cost='{item['cost'] or 0}'>"
                 f"<td>{escape(item['date'])}</td><td>{escape(item['operation'])}</td>"
                 f"<td>{escape(item['model'])}</td><td>{item['input'] if item['input'] is not None else 'unknown'}</td>"
                 f"<td>{item['output'] if item['output'] is not None else 'unknown'}</td><td>{cost_text}</td>"
                 f"<td>{escape(item['status'])}</td></tr>"
             )
+        chart_data = json.dumps(daily, ensure_ascii=False).replace("</", "<\\/")
+        chart_script = (
+            "<script>"
+            f"const usageDays={chart_data};"
+            "const usageColors=" + json.dumps(colors) + ";"
+            "function renderUsage(mode){const keys=Object.keys(usageDays);const totals=keys.map(day=>Object.values(usageDays[day]).reduce((sum,item)=>sum+item[mode],0));const max=Math.max(...totals,1);const chart=document.querySelector('#usage-chart');chart.innerHTML=keys.map((day,index)=>`<div class=\"usage-column\" title=\"${day}: ${mode==='tokens'?totals[index].toLocaleString()+' tokens':'$'+totals[index].toFixed(8)}\"><span class=\"usage-column-value\">${mode==='tokens'?totals[index].toLocaleString():'$'+totals[index].toFixed(6)}</span><div class=\"usage-column-bar\" style=\"height:${Math.max(totals[index]/max*100,totals[index]?3:0)}%\"></div><small>${day.slice(5)}</small></div>`).join('');document.querySelector('#usage-axis').textContent=mode==='tokens'?'tokens':'dollars';const stack=document.querySelector('#usage-stack');stack.innerHTML=keys.map(day=>{const values=usageDays[day];const total=Object.values(values).reduce((sum,item)=>sum+item[mode],0);const segments=Object.entries(values).map(([operation,item])=>`<span title=\"${operation}\" style=\"width:${total?item[mode]/total*100:0}%;background:${usageColors[operation]||'#8792a8'}\"></span>`).join('');return `<div class=\"usage-day\"><span>${day}</span><div class=\"usage-bar\">${segments||'<span style=\"width:100%;background:#d8deea\"></span>'}</div><span>${mode==='tokens'?total.toLocaleString():'$'+total.toFixed(6)}</span></div>`}).join('');}"
+            "renderUsage('tokens');document.querySelectorAll('[data-usage-mode]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-usage-mode]').forEach(item=>item.classList.remove('active'));button.classList.add('active');renderUsage(button.dataset.usageMode);}));"
+            "const table=document.querySelector('#usage-table');const filter=document.querySelector('#usage-date-filter');const sort=document.querySelector('#usage-sort');function updateTable(){const rows=[...table.tBodies[0].rows].filter(row=>row.dataset.date);const query=filter.value;rows.forEach(row=>row.hidden=query&&!row.dataset.date.startsWith(query));const visible=rows.filter(row=>!row.hidden);visible.sort((a,b)=>{const key=sort.value;const left=key==='cost'?Number(a.dataset.cost):key==='operation'?a.dataset.operation:a.dataset.date;const right=key==='cost'?Number(b.dataset.cost):key==='operation'?b.dataset.operation:b.dataset.date;return sort.dataset.direction==='asc'?String(left).localeCompare(String(right),undefined,{numeric:true}):String(right).localeCompare(String(left),undefined,{numeric:true});});visible.forEach(row=>table.tBodies[0].appendChild(row));}filter.addEventListener('input',updateTable);sort.addEventListener('change',updateTable);document.querySelector('#usage-sort-direction').addEventListener('click',event=>{sort.dataset.direction=sort.dataset.direction==='asc'?'desc':'asc';event.target.textContent=sort.dataset.direction==='asc'?'Ascending':'Descending';updateTable();});"
+            "</script>"
+        )
         body = (
             "<header class='page-header'><div><p class='eyebrow'>Usage accounting</p><h1>Cost and usage</h1>"
-            "<p class='muted'>Reported token usage is shown when the provider returns it. Media operations without token usage remain visible as not estimated.</p></div></header>"
+            "<p class='muted'>The charts show the last ten days. Reported token usage is used when the provider returns it.</p></div></header>"
             "<div class='summary-grid'>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-dollar-sign'></i></div><span class='stat-value'>${total_cost:.6f}</span><span class='stat-label'>Estimated cost</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-arrow-down'></i></div><span class='stat-value'>{total_input:,}</span><span class='stat-label'>Input tokens</span></div>"
             f"<div class='stat-card'><div class='stat-icon'><i class='fa-solid fa-arrow-up'></i></div><span class='stat-value'>{total_output:,}</span><span class='stat-label'>Output tokens</span></div></div>"
-            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-chart-column'></i> Daily cost</h2>"
-            "<span class='muted'>Stacked by operation</span></div>"
-            + ("".join(bars) or "<p class='muted'>No usage recorded yet.</p>")
-            + "<p class='muted'>Replies, summaries, transcription, images, documents, and video are separated when diagnostics identify them.</p></section>"
-            "<section class='panel'><h2 class='section-title'><i class='fa-solid fa-table-list'></i> Operation details</h2>"
-            "<div style='overflow:auto'><table><thead><tr><th>Date</th><th>Operation</th><th>Model</th><th>Input</th><th>Output</th><th>Cost</th><th>Status</th></tr></thead><tbody>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-chart-column'></i> Daily usage</h2>"
+            "<div class='form-actions'><button class='button-secondary active' data-usage-mode='tokens'>Tokens</button><button class='button-secondary' data-usage-mode='cost'>Dollars</button></div></div>"
+            "<div class='usage-axis'><span id='usage-axis'>tokens</span></div><div id='usage-chart' class='usage-chart'></div><div class='usage-chart-x'>Last ten days</div></section>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-layer-group'></i> Usage by operation</h2><span class='muted'>Same ten-day period</span></div>"
+            "<div id='usage-stack'></div><p class='muted'>Colors separate replies, summaries, transcription, images, documents, and video.</p></section>"
+            "<section class='panel'><div class='panel-header'><h2 class='section-title'><i class='fa-solid fa-table-list'></i> Operation details</h2><div class='form-actions'><label class='muted'>Date <input id='usage-date-filter' type='date'></label><label class='muted'>Sort <select id='usage-sort' data-direction='desc'><option value='date'>Date</option><option value='operation'>Operation</option><option value='cost'>Cost</option></select></label><button id='usage-sort-direction' class='button-secondary'>Descending</button></div></div>"
+            "<div style='overflow:auto'><table id='usage-table'><thead><tr><th>Date</th><th>Operation</th><th>Model</th><th>Input</th><th>Output</th><th>Cost</th><th>Status</th></tr></thead><tbody>"
             + ("".join(rows) or "<tr><td colspan='7'>No usage recorded yet.</td></tr>")
             + "</tbody></table></div></section>"
+            + chart_script
         )
         return page_shell("Cost and usage", body, "usage")
 

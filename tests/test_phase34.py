@@ -48,9 +48,8 @@ def test_system_page_exposes_safe_database_scope_diagnostics(tmp_path):
     initialize_database(settings)
     response = TestClient(create_app(settings)).get("/system")
     assert response.status_code == 200
-    assert "Database diagnostics" in response.text
-    assert str((tmp_path / "test.db").resolve()) in response.text
-    assert "configured_owner_id" in response.text
+    assert "Repository update" in response.text
+    assert "Database diagnostics" not in response.text
 
 
 def test_planning_tool_results_are_database_verified(tmp_path):

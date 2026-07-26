@@ -23,3 +23,6 @@ def test_dashboard_shows_loaded_revision_and_usage_page(tmp_path):
     assert usage.status_code == 200
     assert "Cost and usage" in usage.text
     assert "No usage recorded yet" in usage.text
+    assert "usage-chart" in usage.text
+    assert "usage-date-filter" in usage.text
+    assert "usage-sort-direction" in usage.text

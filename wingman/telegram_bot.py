@@ -5,6 +5,7 @@ import json
 import shutil
 from collections.abc import Awaitable
 from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -554,6 +555,22 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     sessions = session_factory(settings)
     model_client = ModelClient(settings) if settings.openai_api_key else None
     image_groups: dict[str, list[TelegramMessage]] = {}
+    batch_lock = asyncio.Lock()
+    batch_buffers: dict[int, list[TelegramMessage]] = {}
+    batch_leaders: set[int] = set()
+
+    async def collect_message_batch(message: TelegramMessage) -> list[TelegramMessage] | None:
+        chat_id = message.chat.id
+        async with batch_lock:
+            batch_buffers.setdefault(chat_id, []).append(message)
+            if chat_id in batch_leaders:
+                return None
+            batch_leaders.add(chat_id)
+        await asyncio.sleep(1.0)
+        async with batch_lock:
+            batch = batch_buffers.pop(chat_id, [])
+            batch_leaders.discard(chat_id)
+        return batch
 
     @router.message(CommandStart())
     async def start(message: TelegramMessage) -> None:
@@ -659,6 +676,22 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
     async def chat(message: TelegramMessage) -> None:
         if message.from_user is None or message.from_user.id != settings.telegram_owner_id:
             return
+        batch = await collect_message_batch(message)
+        if batch is None:
+            return
+        primary = next(
+            (
+                item
+                for item in batch
+                if item.voice is not None or item.photo or item.document or item.video is not None
+            ),
+            batch[0],
+        )
+        message = primary
+        assert message.from_user is not None
+        additional_text = [
+            item.text or "" for item in batch if item is not primary and (item.text or "").strip()
+        ]
         if (
             not message.text
             and message.voice is None
@@ -668,7 +701,7 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
         ):
             await message.answer(
                 "I can process text, voice, image, document, and video messages. "
-                "This message type is not supported yet."
+                "I cannot process that message type."
             )
             return
         owner_id = message.from_user.id
@@ -690,15 +723,21 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     return
                 if message.media_group_id:
                     group_id = message.media_group_id
-                    if group_id in image_groups:
+                    grouped_photos = [item for item in batch if item.photo]
+                    if len(grouped_photos) > 1:
+                        inbound = await with_typing(
+                            message, download_photos(grouped_photos, settings)
+                        )
+                    elif group_id in image_groups:
                         image_groups[group_id].append(message)
                         return
-                    image_groups[group_id] = [message]
-                    await asyncio.sleep(0.35)
-                    grouped_messages = image_groups.pop(group_id, [])
-                    inbound = await with_typing(
-                        message, download_photos(grouped_messages, settings)
-                    )
+                    else:
+                        image_groups[group_id] = [message]
+                        await asyncio.sleep(0.35)
+                        grouped_messages = image_groups.pop(group_id, [])
+                        inbound = await with_typing(
+                            message, download_photos(grouped_messages, settings)
+                        )
                 else:
                     inbound = await with_typing(message, download_photo(message, settings))
             elif message.document:
@@ -721,6 +760,11 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                     text=message.text or "",
                     source_type="telegram_text",
                     provider_message_id=message.message_id,
+                )
+            if additional_text:
+                inbound = replace(
+                    inbound,
+                    text="\n\n".join(part for part in [inbound.text, *additional_text] if part),
                 )
             await send_typing(message)
         except (RuntimeError, ValueError) as exc:
