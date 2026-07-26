@@ -1,6 +1,6 @@
 # Architecture
 
-Wingman 5.3.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
+Wingman 5.4.0 is a small Python monolith. FastAPI serves the local dashboard, aiogram runs the Telegram polling loop, SQLAlchemy manages persistence, and the OpenAI Responses API generates conversation replies and embeddings.
 
 The application is designed for one trusted owner on one machine. It favors clear boundaries and inspectable state over distributed services or a separate frontend application.
 
@@ -30,7 +30,7 @@ Recent messages remain separate from dynamic context. The current user message a
 
 Memories belong to the configured owner and support types, statuses, confidence, importance, soft deletion, notes, and Telegram card references. Memory notes preserve evidence, context, and source message IDs without requiring duplicate memory records.
 
-Retrieval is model-directed. When the model calls `search_memories`, the application uses normalized lexical matching and semantic similarity when an embedding is available. Deterministic importance, confidence, and recency weighting ranks relevant candidates. Query data, candidate text, score components, notes, and source IDs are recorded in retrieval logs for dashboard inspection.
+Retrieval is model-directed. When the model calls `search_memories`, the application embeds the query and combines cosine similarity with normalized lexical matching. Deterministic importance, confidence, and recency weighting ranks relevant candidates, while minimum relevance thresholds reject weak name-only matches. Query data, candidate text, score components, notes, and source IDs are recorded in retrieval logs for dashboard inspection. Lexical retrieval remains available when an embedding is missing or fails.
 
 Uncertain personal observations can become pending proposals. The owner can accept or dismiss a proposal. Memory tools are application-controlled, ownership-checked, schema-validated, audited, and bounded by the model loop.
 

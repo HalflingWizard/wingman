@@ -208,9 +208,16 @@ class MemoryToolExecutor:
                 )
                 return output
             if name == "search_memories":
+                query_vector = arguments.pop("_query_embedding", None)
+                if not isinstance(query_vector, list):
+                    query_vector = None
                 search_data = SearchMemoriesInput.model_validate(arguments)
                 matches = retrieve_memories(
-                    self.session, self.user, search_data.query, limit=search_data.top_k
+                    self.session,
+                    self.user,
+                    search_data.query,
+                    limit=search_data.top_k,
+                    query_vector=query_vector,
                 )
                 if self.conversation is not None:
                     log_retrieval(

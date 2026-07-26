@@ -42,6 +42,8 @@ TERM_ALIASES = {
     "jewellery": "accessory",
     "jewelry": "accessory",
 }
+MIN_KEYWORD_MATCH = 0.5
+MIN_SEMANTIC_SIMILARITY = 0.45
 
 
 @dataclass(frozen=True)
@@ -133,7 +135,7 @@ def retrieve_memories(
             + 0.10 * memory.confidence
             + 0.05 * recency
         )
-        if keyword_match or semantic_similarity:
+        if keyword_match >= MIN_KEYWORD_MATCH or semantic_similarity >= MIN_SEMANTIC_SIMILARITY:
             results.append(
                 RetrievalResult(
                     memory,

@@ -1348,6 +1348,9 @@ def build_dispatcher(settings: Settings) -> Dispatcher:
                         built_context.dynamic_context,
                         tool_executor=execute_model_tool,
                         attachments=inbound.attachments,
+                        query_embedding_provider=lambda query: model_client.embed(
+                            query, settings.openai_embedding_model
+                        ),
                     ),
                 ),
                 timeout=settings.response_timeout_seconds,

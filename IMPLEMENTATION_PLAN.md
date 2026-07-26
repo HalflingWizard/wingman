@@ -1,6 +1,15 @@
 # Implementation plan
 
-Wingman 5.3.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+Wingman 5.4.0 is the current completed release. The project remains a small local monolith with a server-rendered dashboard, one Telegram bot process, SQLite persistence, and controlled OpenAI model access.
+
+## Phase 5.4 completed
+
+- Added query embeddings to model-directed memory searches.
+- Combined cosine similarity with normalized keyword overlap, importance, confidence, and recency.
+- Added relevance thresholds that reject weak name-only matches.
+- Preserved lexical fallback when memory embeddings are unavailable or an embedding request fails.
+- Kept normal tool selection automatic instead of forcing memory search on every request.
+- Added retrieval and tool-path regression tests.
 
 ## Phase 5.3 completed
 
@@ -556,3 +565,147 @@ Model-directed retrieval and attachment intake hardening
 - Persist the incoming dashboard message before media processing so failures remain visible.
 - Record and report download, decoding, transcription, and media API failures with safe user-facing messages and detailed diagnostics.
 - Add tests for model-directed retrieval, file classification, and early dashboard persistence.
+
+## Version 5.x roadmap
+
+Each phase below is a release increment. The current completed release is 5.3.0. The roadmap keeps the agent natural, keeps the dashboard as the context source of truth, and avoids unnecessary tool and prompt duplication.
+
+### Phase 5.4
+
+Hybrid retrieval and search quality
+
+Status complete
+
+- Replace the current keyword-only tool execution path with hybrid memory retrieval.
+- Turn each memory-search query into an embedding using the configured embedding model.
+- Compare the query embedding with stored memory embeddings using cosine similarity.
+- Combine semantic similarity, normalized keyword overlap, phrase matches, recency, confidence, and importance into one transparent score.
+- Return semantic similarity and keyword contributions in retrieval diagnostics.
+- Apply minimum relevance thresholds so a shared name alone cannot make an unrelated memory appear relevant.
+- Keep keyword retrieval as a useful fallback when embeddings are missing.
+- Use a focused query based on the actual user request instead of allowing an empty or invented subject to dominate retrieval.
+- Return memory statements and notes together with internal IDs for tool use.
+- Remove mandatory memory search from every turn and return normal tool selection to `auto`.
+- Strongly guide the model to search when saved context, prior history, or duplicate checking is relevant.
+
+Acceptance requirements
+
+- A query about pizza does not return memories only because they mention the person's name.
+- A query about jewelry can match accessories through both semantic similarity and normalized terms.
+- Retrieval diagnostics show the query, keywords, cosine similarity, keyword score, final score, and selected records.
+- Tests cover missing embeddings, weak matches, close semantic matches, and keyword-only fallback.
+
+### Phase 5.5
+
+Dashboard-owned prompt and context architecture
+
+Status planned
+
+- Replace the current static and dynamic context layout with organized editable sections.
+- Add Personality and safety, Memory and planning behavior, Tool orchestration, and Attachment capabilities sections.
+- Add a read-only Personal context section with owner name, primary person name, timezone, current local time, and active model.
+- Persist editable sections as versioned prompt configuration records.
+- Mark exactly one prompt version as active.
+- Invalidate stale prompt caches immediately after Save.
+- Make every new model request load the active prompt version or a correctly refreshed cache.
+- Build one shared final-context function for both real requests and dashboard preview.
+- Add a Preview final agent context action showing the exact combined prompt and resolved runtime values.
+- Remove repeated names, timezone text, examples, and duplicated rules from the final prompt.
+
+Acceptance requirements
+
+- A saved dashboard edit appears in the next agent request without restarting the process.
+- The preview and the real request use the same context builder.
+- Runtime personal values appear once in the final prompt.
+- Old prompt versions can be inspected and the active version is visible.
+
+### Phase 5.6
+
+Simplified tools and reliable orchestration
+
+Status planned
+
+- Keep `search_memories`, `create_memory`, and `update_memory` as the memory tools.
+- Remove proposal, confirmation, note-only, and action-registration tools from the active tool set.
+- Keep `search_planning`, `create_place`, `create_saved_idea`, `create_event`, and `create_reminder`.
+- Add one validated `update_planning_item` tool for places, ideas, events, and reminders.
+- Keep deletion under user Telegram cards and dashboard controls.
+- Update schemas with clear allowed values, optional fields, ownership rules, and date requirements.
+- Use an async or otherwise safe embedding path when a model-generated search query reaches the hybrid retriever.
+- Keep one primary agent with a bounded six to eight round tool loop.
+- Execute parallel independent tool calls and return every result to the same agent.
+- Add idempotency keys for all memory and planning writes.
+- Prevent duplicate writes when the same call is repeated during one turn.
+
+Acceptance requirements
+
+- The active request contains only the current supported tool set.
+- Multiple requested saves complete without proposal or confirmation loops.
+- Updates modify the intended owned record and do not create duplicates.
+- A maximum tool round failure is logged and reported clearly.
+
+### Phase 5.7
+
+Time-aware retrieval and Telegram reply context
+
+Status planned
+
+- Add date range, memory type, person, item type, city, and top-k filters to search tools.
+- Resolve phrases such as last week, last June, yesterday, this month, and between May and July using the configured timezone.
+- Search memories by meaningful occurrence time when available, not only creation time.
+- Search places, ideas, events, and reminders using the correct record date fields.
+- Include replied-to Telegram messages in the next agent input.
+- Include structured memory and planning card context when the owner replies to a card.
+- Provide internal record IDs to tools without exposing them in final replies.
+- Avoid repeating a search when a replied card already identifies the exact record.
+
+Acceptance requirements
+
+- A reply to a planning card updates that exact record.
+- A reply to a memory card can append context or correct the memory.
+- Time-bounded searches use explicit timezone-aware date ranges.
+- The dashboard and API-call inspector show reply and card context clearly.
+
+### Phase 5.8
+
+Planning dashboard and local settings experience
+
+Status planned
+
+- Replace the four-panel planning page with Places, Saved ideas, Events, and Reminders tabs.
+- Add search, filters, add controls, edit controls, and record-specific forms.
+- Add notes and meaningful occurrence fields where the data model supports them.
+- Add confirmed hard deletion only in the dashboard with a two-step confirmation.
+- Keep Telegram deletion as the existing card-based user action.
+- Add location autocomplete with debounce, keyboard navigation, normalized selection, and timezone resolution.
+- Keep manual location input available when no suggestion is selected.
+- Show configuration values and active prompt version clearly without exposing secrets.
+
+Acceptance requirements
+
+- Each planning record type has an appropriate add and edit form.
+- Destructive dashboard actions require explicit confirmation.
+- A selected city updates the stored timezone used by future agent context.
+- Planning counts and cards reflect database state immediately after writes.
+
+### Phase 5.9
+
+Observability, attachments, and release hardening
+
+Status planned
+
+- Upgrade the logs page into a bounded live log viewer with levels, timestamps, search, filters, copy, pause, auto-scroll, and line-wrap controls.
+- Keep runtime logs bounded and redact secrets, tokens, private URLs, and unnecessary attachment data.
+- Improve attachment diagnostics for images, documents, audio, video, oversized files, failed downloads, empty files, and corrupt media.
+- Keep temporary attachment files short-lived and remove them after success, failure, timeout, cancellation, or restart.
+- Verify attachment guidance in the shared prompt and preview.
+- Run end-to-end tests for memory writes, planning writes, updates, card replies, time-aware retrieval, prompt refresh, dashboard consistency, and Telegram command behavior.
+- Run the full test suite, lint, formatting, type checks, migration checks, and diff checks.
+- Update the README, architecture, build specification, security notes, agent rules, implementation plan, and current release notes.
+
+Acceptance requirements
+
+- Every failed operation has a clear Telegram message and a detailed dashboard log.
+- The dashboard shows current database state without requiring a process restart.
+- No temporary attachment remains after its retention window.
+- The release can be installed and upgraded using the documented procedure.

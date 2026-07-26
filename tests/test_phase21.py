@@ -4,15 +4,7 @@ from types import SimpleNamespace
 
 from wingman.config import Settings
 from wingman.inbound import InboundAttachment, InboundMessage
-from wingman.model_client import ModelClient, mandatory_retrieval_tool
-
-
-def test_every_user_turn_selects_memory_search_first():
-    assert mandatory_retrieval_tool([("user", "Hello")]) == "search_memories"
-    assert mandatory_retrieval_tool([("user", "Please use my saved memories")]) == (
-        "search_memories"
-    )
-    assert mandatory_retrieval_tool([("assistant", "Hello")]) is None
+from wingman.model_client import ModelClient
 
 
 def test_inbound_message_supports_multiple_temporary_attachments():
@@ -74,10 +66,10 @@ def test_model_request_allows_multiple_tool_calls():
     assert answer == "Done."
     assert len(executed) == 2
     assert calls[0]["parallel_tool_calls"] is True
-    assert calls[0]["tool_choice"] == {"type": "function", "name": "search_memories"}
+    assert calls[0]["tool_choice"] == "auto"
 
 
-def test_explicit_memory_request_forces_first_search_then_returns_to_auto():
+def test_memory_search_stays_automatic_through_tool_loop():
     settings = Settings(openai_api_key="test-key", openai_main_model="gpt-5-nano")
     client = ModelClient(settings)
     calls = []
@@ -115,7 +107,7 @@ def test_explicit_memory_request_forces_first_search_then_returns_to_auto():
     )
 
     assert answer == "I found the relevant saved detail."
-    assert calls[0]["tool_choice"] == {"type": "function", "name": "search_memories"}
+    assert calls[0]["tool_choice"] == "auto"
     assert calls[1]["tool_choice"] == "auto"
 
 
